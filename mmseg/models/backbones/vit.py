@@ -109,7 +109,6 @@ class TransformerEncoderLayer(BaseModule):
         return getattr(self, self.norm2_name)
 
     def forward(self, x):
-
         def _inner_forward(x):
             x = self.attn(self.norm1(x), identity=x)
             x = self.ffn(self.norm2(x), identity=x)
