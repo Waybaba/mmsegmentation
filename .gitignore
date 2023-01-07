@@ -115,6 +115,8 @@ data
 *.log.json
 work_dirs/
 mmseg/.mim
+/mmseg
+/mmsegmentation
 
 # Pytorch
 *.pth
