@@ -4,15 +4,14 @@ _base_ = [
     '../configs/_base_/default_runtime.py', 
     '../configs/_base_/schedules/schedule_40k.py'
 ]
-crop_size = (512, 1024)
-data_preprocessor = dict(size=crop_size)
-model = dict(data_preprocessor=data_preprocessor)
 
 
 
 
 # dataset GTA->Cityscapes
-crop_size = (512, 1024)
+crop_size = (512, 512)
+data_preprocessor = dict(size=crop_size)
+model = dict(data_preprocessor=data_preprocessor)
 train_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(type='LoadAnnotations'),
@@ -56,10 +55,10 @@ train_dataloader = dict(
     persistent_workers=True,
     sampler=dict(type='InfiniteSampler', shuffle=True),
     dataset=dict(
-        type="TODO",
-        data_root="TODO",
+        type="GTADataset",
+        data_root="data/GTA5",
         data_prefix=dict(
-            img_path='leftImg8bit/train', seg_map_path='gtFine/train'),
+            img_path='images', seg_map_path='labels'),
         pipeline=train_pipeline))
 val_dataloader = dict(
     batch_size=1,

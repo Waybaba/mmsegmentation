@@ -79,8 +79,11 @@ RUN pip install \
 # RUN mim install mmcv==2.0.1 \
 # RUN mim install mmcv==1.7.1 \
 # RUN mim install mmcv mmsegmentation==0.29
-RUN mim uninstall mmcv mmsegmentation mmengine # uninstall mmcv so that the old mmcv-full would be used
-RUN mim install mmsegmentation==1.0.0
+# RUN mim uninstall mmcv mmsegmentation mmengine # uninstall mmcv so that the old mmcv-full would be used
+# RUN mim install mmsegmentation==1.0.0
+# RUN mim uninstall mmsegmentation
+RUN pip install cityscapesscripts
+RUN mim install mmcv mmengine
 # RUN mim install mmengine
 # RUN mim install mmcv --no-binary :all:
 
