@@ -291,6 +291,8 @@ class AmltLauncher:
         
     def parse_cmd_args(self, args):
         type_cur = 1
+        
+        not_yet_met_py = True
 
         for arg in args:
             if arg.startswith("amlt."):
@@ -299,10 +301,11 @@ class AmltLauncher:
                 key = key.replace("amlt.", "")
                 self.launcher_args[key] = value
 
-            elif arg.endswith(".py") or arg == "python":
+            elif not_yet_met_py and arg.endswith(".py") or arg == "python":
                 if arg == "python": continue
                 assert type_cur == 1, "type should be 1"
                 self.entry_file = arg
+                not_yet_met_py = False
                 type_cur = 2
 
             else: # args
