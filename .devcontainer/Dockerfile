@@ -102,5 +102,5 @@ RUN groupadd --gid $USER_GID $USERNAME \
 ENV MKL_THREADING_LAYER=GNU
 
 ### end # comment the following when amlt: amlt need root user to build, but it will switch to a user called aiscuser when running
-# USER $USERNAME 
-# CMD sleep infinity
+USER $USERNAME 
+CMD sleep infinity
