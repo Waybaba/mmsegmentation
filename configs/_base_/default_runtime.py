@@ -7,7 +7,8 @@ env_cfg = dict(
 vis_backends = [dict(type='LocalVisBackend'),dict(
     type='WandbVisBackend',
     init_kwargs=dict(
-        project='toy-example'
+        project='toy-example',
+        
     )
     )]
 visualizer = dict(

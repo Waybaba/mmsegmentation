@@ -1,0 +1,33 @@
+code:
+  local_dir: $CONFIG_DIR/../../
+description: AMLT
+environment:
+  image: waybaba/rl:diffuser3
+  setup:
+  - echo "setup start..."
+  - export UPRJDIR=/mnt/default/
+  - sudo mkdir -p /mnt/storage/output /mnt/storage/data
+  - sudo ln -s /mnt/storage/output /output
+  - sudo ln -s /mnt/storage/data /data
+  - echo "setup finished!"
+  username: waybaba
+search:
+  job_template:
+    command:
+    - 'python src/gtatrain_cfg.py --cfg-options train_cfg.val_interval=100 default_hooks.logger.type=WandbLoggerHook
+      backbone.depth=101 train_cfg.max_iters=10 vis_backends.init_kwargs.tags=[plightning13]
+      vis_backends.init_kwargs.project=UR  '
+    name: RL_Delayed_{experiment_name:s}_{auto:5s}
+    sku: G1-P40
+  max_trials: 10000
+  params: []
+  type: grid
+storage:
+  input:
+    container_name: v-wangwei1
+    local_dir: /home/v-wangwei1/
+    mount_dir: /mnt/storage
+    storage_account_name: resrchvc4data
+target:
+  name: msrresrchvc
+  service: singularity
