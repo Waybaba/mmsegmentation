@@ -357,7 +357,7 @@ class AmltLauncher:
         
         if "tags" in self.args['normal']:
             tags = self.args['normal']["tags"]
-        elif ".tags" in self.args['normal']:
+        elif [k for k in self.args['normal'] if k.endswith(".tags")] != []:
             # e.g. vis_backends.0.init_kwargs.tags
             k_ = [k for k in self.args['normal'] if k.endswith(".tags")]
             assert len(k_) == 1, "only one tags allowed"
