@@ -357,8 +357,11 @@ class AmltLauncher:
         
         if "tags" in self.args['normal']:
             tags = self.args['normal']["tags"]
-        elif "vis_backends.init_kwargs.tags" in self.args['normal']:
-            tags = self.args['normal']['vis_backends.init_kwargs.tags']
+        elif ".tags" in self.args['normal']:
+            # e.g. vis_backends.0.init_kwargs.tags
+            k_ = [k for k in self.args['normal'] if k.endswith(".tags")]
+            assert len(k_) == 1, "only one tags allowed"
+            tags = self.args['normal'][k_[0]]
         else:
             raise ValueError("no tags found")
         
