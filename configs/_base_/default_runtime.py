@@ -6,11 +6,12 @@ env_cfg = dict(
 )
 vis_backends = [dict(type='LocalVisBackend'),dict(
     type='WandbVisBackend',
-    init_kwargs=dict(
-        project='toy-example',
-        
+        init_kwargs=dict(
+        project='MMSEG',
+        mode="online",
+        tags=["test"]
     )
-    )]
+)]
 visualizer = dict(
     type='SegLocalVisualizer', vis_backends=vis_backends, name='visualizer')
 log_processor = dict(by_epoch=False)
