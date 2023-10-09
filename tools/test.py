@@ -1,4 +1,6 @@
 # Copyright (c) OpenMMLab. All rights reserved.
+import pyrootutils
+root = pyrootutils.setup_root(__file__, dotenv=True, pythonpath=True, indicator=["configs"])
 import argparse
 import os
 import os.path as osp

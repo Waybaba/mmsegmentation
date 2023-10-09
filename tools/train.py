@@ -1,4 +1,6 @@
 # Copyright (c) OpenMMLab. All rights reserved.
+import pyrootutils
+root = pyrootutils.setup_root(__file__, dotenv=True, pythonpath=True, indicator=["configs"])
 import argparse
 import logging
 import os
@@ -9,6 +11,8 @@ from mmengine.logging import print_log
 from mmengine.runner import Runner
 
 from mmseg.registry import RUNNERS
+
+
 
 
 def parse_args():
