@@ -29,12 +29,12 @@ model = dict(data_preprocessor=data_preprocessor)
 train_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(type='LoadAnnotations'),
-    dict(
-        type='RandomResize',
-        scale=(1280,720), # ! from daformer settings
-        ratio_range=(0.5, 2.0),
-        keep_ratio=True),
-    # dict(type='Resize', scale=(1280, 720)),
+    # dict(
+    #     type='RandomResize',
+    #     scale=(1280,720), # ! from daformer settings
+    #     ratio_range=(0.5, 2.0),
+    #     keep_ratio=True),
+    dict(type='Resize', scale=(1280, 720)),
     dict(type='RandomCrop', crop_size=crop_size, cat_max_ratio=0.75),
     dict(type='RandomFlip', prob=0.5), # ! ? why this is no normization
     dict(type='PhotoMetricDistortion'),
