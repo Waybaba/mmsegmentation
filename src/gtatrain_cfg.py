@@ -9,7 +9,11 @@ _base_ = [
 
 
 # dataset GTA->Cityscapes
-crop_size = (512, 512)
+# import os
+# data_folder = os.environ['UDATADIR']
+data_folder = "/data" # ! CHANGE for dataset path
+tags = ["a_test"]
+crop_size = (512, 512) # ! Crop size
 data_preprocessor = dict(size=crop_size)
 model = dict(data_preprocessor=data_preprocessor)
 train_pipeline = [
@@ -17,17 +21,17 @@ train_pipeline = [
     dict(type='LoadAnnotations'),
     dict(
         type='RandomResize',
-        scale=(2048, 1024), # ! TODO
+        scale=(1280, 720), # from daformer setting
         ratio_range=(0.5, 2.0),
         keep_ratio=True),
     dict(type='RandomCrop', crop_size=crop_size, cat_max_ratio=0.75),
-    dict(type='RandomFlip', prob=0.5),
+    dict(type='RandomFlip', prob=0.5), # ! ? why this is no normization
     dict(type='PhotoMetricDistortion'),
     dict(type='PackSegInputs')
 ]
 test_pipeline = [
-    dict(type='LoadImageFromFile'),
-    dict(type='Resize', scale=(2048, 1024), keep_ratio=True),
+    dict(type='LoadImageFromFile'), # ! TODO do we need to keep as train size
+    dict(type='Resize', scale=(1024, 512), keep_ratio=True), # ! why, the origin is 2048, 1024
     # add loading annotation after ``Resize`` because ground truth
     # does not need to do resize data transform
     dict(type='LoadAnnotations'),
@@ -56,18 +60,18 @@ train_dataloader = dict(
     sampler=dict(type='InfiniteSampler', shuffle=True),
     dataset=dict(
         type="GTADataset",
-        data_root="data/GTA5",
+        data_root=data_folder+"/GTA5",
         data_prefix=dict(
             img_path='images', seg_map_path='labels'),
         pipeline=train_pipeline))
 val_dataloader = dict(
-    batch_size=1,
-    num_workers=4,
+    batch_size=2,
+    num_workers=2,
     persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=False),
     dataset=dict(
         type="CityscapesDataset",
-        data_root="data/cityscapes/",
+        data_root=data_folder+"/Cityscapes/",
         data_prefix=dict(
             img_path='leftImg8bit/val', seg_map_path='gtFine/val'),
         pipeline=test_pipeline))
