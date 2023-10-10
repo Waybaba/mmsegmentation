@@ -269,8 +269,8 @@ class RandomCrop(BaseTransform):
 
             margin_h = max(img.shape[0] - self.crop_size[0], 0)
             margin_w = max(img.shape[1] - self.crop_size[1], 0)
-            offset_h = np.random.randint(0, margin_h + 1)
-            offset_w = np.random.randint(0, margin_w + 1)
+            offset_h = np.random.randint(0, margin_h)
+            offset_w = np.random.randint(0, margin_w)
             crop_y1, crop_y2 = offset_h, offset_h + self.crop_size[0]
             crop_x1, crop_x2 = offset_w, offset_w + self.crop_size[1]
 
