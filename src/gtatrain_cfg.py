@@ -32,7 +32,7 @@ train_pipeline = [
     dict(
         type='RandomResize',
         scale=(1280,720), # ! from daformer settings
-        ratio_range=(0.5, 2.0),
+        ratio_range=(0.75, 2.0), # ! use 0.5, 2.0 before but would cause bug
         keep_ratio=True),
     # dict(type='Resize', scale=(1280, 720)),
     dict(type='RandomCrop', crop_size=crop_size, cat_max_ratio=0.75),
