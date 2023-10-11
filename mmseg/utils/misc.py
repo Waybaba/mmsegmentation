@@ -87,6 +87,11 @@ def stack_batch(inputs: List[torch.Tensor],
             padding_size = (0, width, 0, height)
         else:
             padding_size = [0, 0, 0, 0]
+        
+        print("\n###")
+        print("padding_size", padding_size)
+        print("img shape origin", inputs[i].shape)
+        print("seg shape origin", data_samples[i].gt_sem_seg.data.shape)
 
         # pad img
         pad_img = F.pad(tensor, padding_size, value=pad_val)
@@ -124,8 +129,15 @@ def stack_batch(inputs: List[torch.Tensor],
                 dict(
                     img_padding_size=padding_size,
                     pad_shape=pad_img.shape[-2:]))
-    for padded_sample in padded_samples:
-        if not list(padded_sample.gt_sem_seg.data.shape) == [1, 512, 512]:
-            print("error shape")
-        # print("padded_shape:", padded_sample.gt_sem_seg.data.shape)
+        print("img shape after", pad_img.shape)
+        print("seg shape after", data_sample.gt_sem_seg.data.shape)
+    # print("\n###\ntensor shape:", tensor.shape)
+    # print("padding_size", padding_size)
+    # print("padded img shape", pad_img.shape)
+    # for i in range(len(inputs)):
+    #     padded_sample = padded_samples[i]
+    #     if not list(padded_sample.gt_sem_seg.data.shape) == [1, 512, 512]:
+    #         print("error shape")
+    #     print("seg padded_shape:", padded_sample.gt_sem_seg.data.shape)
+    #     # print("seg before pad:", data_samples[i]
     return torch.stack(padded_inputs, dim=0), padded_samples
