@@ -1,7 +1,7 @@
 _base_ = [
     # '../../_base_/models/segformer_mit-b0.py',
-	# '../../configs/_base_/models/daformer_aspp_mitb5.py',
-    '../../configs/_base_/models/daformer_aspp_mitb0.py',
+	'../../configs/_base_/models/daformer_aspp_mitb5.py',
+    # '../../configs/_base_/models/daformer_aspp_mitb0.py',
     '../../configs/_base_/datasets/cityscapes_1024x1024.py',
     '../../configs/_base_/default_runtime.py', 
 	'../../configs/_base_/schedules/schedule_160k.py'
@@ -9,8 +9,8 @@ _base_ = [
 crop_size = (512, 512)
 data_preprocessor = dict(size=crop_size)
 # checkpoint = 'https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/segformer/mit_b0_20220624-7e0fe6dd.pth'  # noqa
-checkpoint = '/data/models/SegFormer/pretrained_models_ImageNet/mit_b0.pth'
-# checkpoint = '/data/models/SegFormer/pretrained_models_ImageNet/mit_b5.pth'
+# checkpoint = '/data/models/SegFormer/pretrained_models_ImageNet/mit_b0.pth'
+checkpoint = '/data/models/SegFormer/pretrained_models_ImageNet/mit_b5.pth'
 model = dict(
     data_preprocessor=data_preprocessor,
     backbone=dict(init_cfg=dict(type='Pretrained', checkpoint=checkpoint)),
