@@ -124,5 +124,8 @@ def stack_batch(inputs: List[torch.Tensor],
                 dict(
                     img_padding_size=padding_size,
                     pad_shape=pad_img.shape[-2:]))
-
+    for padded_sample in padded_samples:
+        if not list(padded_sample.gt_sem_seg.data.shape) == [1, 512, 512]:
+            print("error shape")
+        print("padded_shape:", padded_sample.gt_sem_seg.data.shape)
     return torch.stack(padded_inputs, dim=0), padded_samples

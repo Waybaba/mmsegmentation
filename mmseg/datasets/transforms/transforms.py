@@ -330,7 +330,7 @@ class RandomCrop(BaseTransform):
 
         results['img'] = img
         results['img_shape'] = img.shape[:2]
-        print(img.shape)
+        # print(img.shape)
         return results
 
     def __repr__(self):

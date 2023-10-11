@@ -147,5 +147,5 @@ class SegDataPreProcessor(BaseDataPreprocessor):
                     data_sample.set_metainfo({**pad_info})
             else:
                 inputs = torch.stack(inputs, dim=0)
-
+        
         return dict(inputs=inputs, data_samples=data_samples)
