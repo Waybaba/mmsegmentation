@@ -98,6 +98,7 @@ class BaseDecodeHead(BaseModule, metaclass=ABCMeta):
                      type='CrossEntropyLoss',
                      use_sigmoid=False,
                      loss_weight=1.0),
+                 decoder_params=None,
                  ignore_index=255,
                  sampler=None,
                  align_corners=False,

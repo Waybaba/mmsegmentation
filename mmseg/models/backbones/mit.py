@@ -11,6 +11,8 @@ from mmcv.cnn.bricks.transformer import MultiheadAttention
 from mmengine.model import BaseModule, ModuleList, Sequential
 from mmengine.model.weight_init import (constant_init, normal_init,
                                         trunc_normal_init)
+from mmseg.models.builder import BACKBONES
+from functools import partial
 
 from mmseg.registry import MODELS
 from ..utils import PatchEmbed, nchw_to_nlc, nlc_to_nchw
@@ -448,3 +450,99 @@ class MixVisionTransformer(BaseModule):
                 outs.append(x)
 
         return outs
+
+
+@BACKBONES.register_module()
+class mit_b0(MixVisionTransformer):
+
+    def __init__(self, **kwargs):
+        super(mit_b0, self).__init__(
+            patch_size=4,
+            embed_dims=[32, 64, 160, 256],
+            num_heads=[1, 2, 5, 8],
+            mlp_ratios=[4, 4, 4, 4],
+            qkv_bias=True,
+            norm_layer=partial(nn.LayerNorm, eps=1e-6),
+            depths=[2, 2, 2, 2],
+            sr_ratios=[8, 4, 2, 1],
+            **kwargs)
+
+
+@BACKBONES.register_module()
+class mit_b1(MixVisionTransformer):
+
+    def __init__(self, **kwargs):
+        super(mit_b1, self).__init__(
+            patch_size=4,
+            embed_dims=[64, 128, 320, 512],
+            num_heads=[1, 2, 5, 8],
+            mlp_ratios=[4, 4, 4, 4],
+            qkv_bias=True,
+            norm_layer=partial(nn.LayerNorm, eps=1e-6),
+            depths=[2, 2, 2, 2],
+            sr_ratios=[8, 4, 2, 1],
+            **kwargs)
+
+
+@BACKBONES.register_module()
+class mit_b2(MixVisionTransformer):
+
+    def __init__(self, **kwargs):
+        super(mit_b2, self).__init__(
+            patch_size=4, # ! TODO
+            embed_dims=[64, 128, 320, 512],
+            num_heads=[1, 2, 5, 8],
+            mlp_ratios=[4, 4, 4, 4],
+            qkv_bias=True,
+            norm_layer=partial(nn.LayerNorm, eps=1e-6),
+            depths=[3, 4, 6, 3],
+            sr_ratios=[8, 4, 2, 1],
+            **kwargs)
+
+
+@BACKBONES.register_module()
+class mit_b3(MixVisionTransformer):
+
+    def __init__(self, **kwargs):
+        super(mit_b3, self).__init__(
+            patch_size=4,
+            embed_dims=[64, 128, 320, 512],
+            num_heads=[1, 2, 5, 8],
+            mlp_ratios=[4, 4, 4, 4],
+            qkv_bias=True,
+            norm_layer=partial(nn.LayerNorm, eps=1e-6),
+            depths=[3, 4, 18, 3],
+            sr_ratios=[8, 4, 2, 1],
+            **kwargs)
+
+
+@BACKBONES.register_module()
+class mit_b4(MixVisionTransformer):
+
+    def __init__(self, **kwargs):
+        super(mit_b4, self).__init__(
+            patch_sizes=[4, 4, 4, 4],
+            embed_dims=[64, 128, 320, 512],
+            num_heads=[1, 2, 5, 8],
+            mlp_ratios=[4, 4, 4, 4],
+            qkv_bias=True,
+            norm_layer=partial(nn.LayerNorm, eps=1e-6),
+            depths=[3, 8, 27, 3],
+            sr_ratios=[8, 4, 2, 1],
+            **kwargs)
+
+
+@BACKBONES.register_module()
+class mit_b5(MixVisionTransformer):
+
+    def __init__(self, **kwargs):
+        super(mit_b5, self).__init__(
+            patch_sizes=[4, 4, 4, 4],
+            embed_dims=[64, 128, 320, 512],
+            num_heads=[1, 2, 5, 8],
+            mlp_ratios=[4, 4, 4, 4],
+            qkv_bias=True,
+            norm_layer=partial(nn.LayerNorm, eps=1e-6),
+            depths=[3, 6, 40, 3],
+            sr_ratios=[8, 4, 2, 1],
+            **kwargs)

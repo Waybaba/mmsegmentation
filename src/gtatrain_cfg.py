@@ -1,6 +1,8 @@
 _base_ = [
-    # '../configs/_base_/models/deeplabv3_r50-d8.py', 
-    '../configs/_base_/models/pspnet_r50-d8.py',
+    # '../configs/_base_/models/deeplabv3_r101-d8.py', 
+	'../configs/deeplabv3/deeplabv3_r101-d8_4xb2-40k_cityscapes-512x1024.py'
+    # '../configs/_base_/models/pspnet_r50-d8.py',
+    # '../configs/_base_/models/daformer_aspp_mitb5.py',
     # '../configs/_base_/datasets/cityscapes.py',
     '../configs/_base_/default_runtime.py', 
     '../configs/_base_/schedules/schedule_40k.py'
@@ -33,6 +35,7 @@ train_pipeline = [
         type='RandomResize',
         scale=(1280,720), # ! from daformer settings
         # ratio_range=(0.71, 0.74), # ! use 0.5, 2.0 before but would cause bug
+        # ratio_range=(0.57,0.59),
         ratio_range=(0.5,2.0),
         keep_ratio=True),
     # dict(type='Resize', scale=(1280, 720)),

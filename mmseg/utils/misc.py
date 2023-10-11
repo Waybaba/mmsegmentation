@@ -50,6 +50,7 @@ def stack_batch(inputs: List[torch.Tensor],
        Tensor: The 4D-tensor.
        List[:obj:`SegDataSample`]: After the padding of the gt_seg_map.
     """
+    DEBUG = True
     assert isinstance(inputs, list), \
         f'Expected input type to be list, but got {type(inputs)}'
     assert len({tensor.ndim for tensor in inputs}) == 1, \
@@ -87,11 +88,10 @@ def stack_batch(inputs: List[torch.Tensor],
             padding_size = (0, width, 0, height)
         else:
             padding_size = [0, 0, 0, 0]
-        
-        print("\n###")
-        print("padding_size", padding_size)
-        print("img shape origin", inputs[i].shape)
-        print("seg shape origin", data_samples[i].gt_sem_seg.data.shape)
+        if DEBUG:
+            print("\n###")
+            print("img padding_size", padding_size)
+            print("img shape origin", inputs[i].shape)
 
         # pad img
         pad_img = F.pad(tensor, padding_size, value=pad_val)
@@ -99,6 +99,23 @@ def stack_batch(inputs: List[torch.Tensor],
         # pad gt_sem_seg
         if data_samples is not None:
             data_sample = data_samples[i]
+            ### seg padding @waybaba
+            seg = data_sample.gt_sem_seg.data
+            if size is not None:
+                width = max(size[-1] - seg.shape[-1], 0)
+                height = max(size[-2] - seg.shape[-2], 0)
+                # (padding_left, padding_right, padding_top, padding_bottom)
+                padding_size = (0, width, 0, height)
+            elif size_divisor is not None:
+                width = max(max_size[-1] - seg.shape[-1], 0)
+                height = max(max_size[-2] - seg.shape[-2], 0)
+                padding_size = (0, width, 0, height)
+            else:
+                padding_size = [0, 0, 0, 0]
+            if DEBUG:
+                print("seg shape origin", data_samples[i].gt_sem_seg.data.shape)
+                print("seg padding_size", padding_size)
+            ### seg padding @waybaba
             pad_shape = None
             if 'gt_sem_seg' in data_sample:
                 gt_sem_seg = data_sample.gt_sem_seg.data
@@ -124,13 +141,15 @@ def stack_batch(inputs: List[torch.Tensor],
                 'padding_size': padding_size
             })
             padded_samples.append(data_sample)
+            if DEBUG: 
+                print("img shape after", pad_img.shape)
+                print("seg shape after", data_sample.gt_sem_seg.data.shape)
         else:
             padded_samples.append(
                 dict(
                     img_padding_size=padding_size,
                     pad_shape=pad_img.shape[-2:]))
-        print("img shape after", pad_img.shape)
-        print("seg shape after", data_sample.gt_sem_seg.data.shape)
+
     # print("\n###\ntensor shape:", tensor.shape)
     # print("padding_size", padding_size)
     # print("padded img shape", pad_img.shape)
