@@ -11,7 +11,7 @@ _base_ = [
 data_folder = '/data'
 train_dataloader = dict(
     dataset=dict(
-        data_root=data_folder+"/GTA5",
+        data_root=data_folder+"/Cityscapes/",
     ))
 val_dataloader = dict(
     dataset=dict(

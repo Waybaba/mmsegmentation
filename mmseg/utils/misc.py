@@ -50,7 +50,7 @@ def stack_batch(inputs: List[torch.Tensor],
        Tensor: The 4D-tensor.
        List[:obj:`SegDataSample`]: After the padding of the gt_seg_map.
     """
-    DEBUG = True
+    DEBUG = False
     assert isinstance(inputs, list), \
         f'Expected input type to be list, but got {type(inputs)}'
     assert len({tensor.ndim for tensor in inputs}) == 1, \
