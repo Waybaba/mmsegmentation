@@ -1,7 +1,7 @@
 _base_ = [
     # '../../_base_/models/segformer_mit-b0.py',
 	'../../configs/_base_/models/daformer_aspp_mitb5.py',
-    # '../../configs/_base_/models/daformer_conv1_mitb0.py',
+    # '../../configs/_base_/models/daformer_aspp_mitb0.py',
     '../../configs/_base_/datasets/cityscapes_1024x1024.py',
     '../../configs/_base_/default_runtime.py', 
 	'../../configs/_base_/schedules/schedule_160k.py'
