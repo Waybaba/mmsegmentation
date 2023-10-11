@@ -1,23 +1,25 @@
 # dataset settings
-dataset_type = 'CityscapesDataset'
-data_root = '/data/Cityscapes/'
-crop_size = (512, 1024)
+crop_size = (512, 512)
+data_folder = "/data" # ! CHANGE for dataset path
 train_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(type='LoadAnnotations'),
     dict(
         type='RandomResize',
-        scale=(2048, 1024),
-        ratio_range=(0.5, 2.0),
+        scale=(1280,720), # ! from daformer settings
+        # ratio_range=(0.71, 0.74), # ! use 0.5, 2.0 before but would cause bug
+        # ratio_range=(0.57,0.59),
+        ratio_range=(0.5,2.0),
         keep_ratio=True),
+    # dict(type='Resize', scale=(1280, 720)),
     dict(type='RandomCrop', crop_size=crop_size, cat_max_ratio=0.75),
-    dict(type='RandomFlip', prob=0.5),
+    dict(type='RandomFlip', prob=0.5), # ! ? why this is no normization
     dict(type='PhotoMetricDistortion'),
     dict(type='PackSegInputs')
 ]
 test_pipeline = [
-    dict(type='LoadImageFromFile'),
-    dict(type='Resize', scale=(2048, 1024), keep_ratio=True),
+    dict(type='LoadImageFromFile'), # ! TODO do we need to keep as train size
+    dict(type='Resize', scale=(1024, 512), keep_ratio=True), # ! why, the origin is 2048, 1024
     # add loading annotation after ``Resize`` because ground truth
     # does not need to do resize data transform
     dict(type='LoadAnnotations'),
@@ -45,19 +47,19 @@ train_dataloader = dict(
     persistent_workers=True,
     sampler=dict(type='InfiniteSampler', shuffle=True),
     dataset=dict(
-        type=dataset_type,
-        data_root=data_root,
+        type="GTADataset",
+        data_root=data_folder+"/GTA5",
         data_prefix=dict(
-            img_path='leftImg8bit/train', seg_map_path='gtFine/train'),
+            img_path='images', seg_map_path='labels'),
         pipeline=train_pipeline))
 val_dataloader = dict(
-    batch_size=1,
-    num_workers=4,
+    batch_size=2,
+    num_workers=2,
     persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=False),
     dataset=dict(
-        type=dataset_type,
-        data_root=data_root,
+        type="CityscapesDataset",
+        data_root=data_folder+"/Cityscapes/",
         data_prefix=dict(
             img_path='leftImg8bit/val', seg_map_path='gtFine/val'),
         pipeline=test_pipeline))
