@@ -4,7 +4,7 @@ _base_ = [
 
 
 # dataset settings
-crop_size = (512, 512)
+crop_size = (1024, 1024)
 data_folder = "/data" 
 data_preprocessor = dict(size=crop_size)
 model = dict(data_preprocessor=data_preprocessor)
