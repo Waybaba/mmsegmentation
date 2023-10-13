@@ -1,0 +1,143 @@
+# @package _global_
+data_preprocessor:
+  bgr_to_rgb: true
+  mean:
+  - 123.675
+  - 116.28
+  - 103.53
+  pad_val: 0
+  seg_pad_val: 255
+  std:
+  - 58.395
+  - 57.12
+  - 57.375
+  type: SegDataPreProcessor
+model:
+  auxiliary_head:
+  - align_corners: false
+    channels: 64
+    concat_input: false
+    in_channels: 128
+    in_index: 1
+    loss_decode:
+      loss_weight: 1.0
+      type: CrossEntropyLoss
+      use_sigmoid: false
+    norm_cfg:
+      requires_grad: true
+      type: SyncBN
+    num_classes: 19
+    num_convs: 1
+    type: FCNHead
+  - align_corners: false
+    channels: 64
+    concat_input: false
+    in_channels: 128
+    in_index: 2
+    loss_decode:
+      loss_weight: 1.0
+      type: CrossEntropyLoss
+      use_sigmoid: false
+    norm_cfg:
+      requires_grad: true
+      type: SyncBN
+    num_classes: 19
+    num_convs: 1
+    type: FCNHead
+  backbone:
+    align_corners: false
+    backbone_cfg:
+      contract_dilation: true
+      depth: 18
+      dilations:
+        _args_:
+        - - 1
+          - 1
+          - 1
+          - 1
+        _target_: builtins.tuple
+      in_channels: 3
+      norm_cfg:
+        requires_grad: true
+        type: SyncBN
+      norm_eval: false
+      num_stages: 4
+      out_indices:
+        _args_:
+        - - 0
+          - 1
+          - 2
+          - 3
+        _target_: builtins.tuple
+      strides:
+        _args_:
+        - - 1
+          - 2
+          - 2
+          - 2
+        _target_: builtins.tuple
+      style: pytorch
+      type: ResNet
+    context_channels:
+      _args_:
+      - - 128
+        - 256
+        - 512
+      _target_: builtins.tuple
+    in_channels: 3
+    init_cfg: null
+    norm_cfg:
+      requires_grad: true
+      type: SyncBN
+    out_channels: 256
+    out_indices:
+      _args_:
+      - - 0
+        - 1
+        - 2
+      _target_: builtins.tuple
+    spatial_channels:
+      _args_:
+      - - 64
+        - 64
+        - 64
+        - 128
+      _target_: builtins.tuple
+    type: BiSeNetV1
+  data_preprocessor:
+    bgr_to_rgb: true
+    mean:
+    - 123.675
+    - 116.28
+    - 103.53
+    pad_val: 0
+    seg_pad_val: 255
+    std:
+    - 58.395
+    - 57.12
+    - 57.375
+    type: SegDataPreProcessor
+  decode_head:
+    align_corners: false
+    channels: 256
+    concat_input: false
+    dropout_ratio: 0.1
+    in_channels: 256
+    in_index: 0
+    loss_decode:
+      loss_weight: 1.0
+      type: CrossEntropyLoss
+      use_sigmoid: false
+    norm_cfg:
+      requires_grad: true
+      type: SyncBN
+    num_classes: 19
+    num_convs: 1
+    type: FCNHead
+  test_cfg:
+    mode: whole
+  train_cfg: {}
+  type: EncoderDecoder
+norm_cfg:
+  requires_grad: true
+  type: SyncBN

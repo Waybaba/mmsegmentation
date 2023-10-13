@@ -1,0 +1,108 @@
+# @package _global_
+albu_train_transforms:
+- p: 0.2
+  type: RandomBrightnessContrast
+- p: 0.5
+  type: HorizontalFlip
+- p: 0.5
+  type: VerticalFlip
+data_root: data/LEVIRCD
+dataset_type: LEVIRCDDataset
+test_dataloader:
+  batch_size: 1
+  dataset:
+    data_prefix:
+      img_path: test/A
+      img_path2: test/B
+      seg_map_path: test/label
+    data_root: data/LEVIRCD
+    pipeline:
+    - type: LoadMultipleRSImageFromFile
+    - type: LoadAnnotations
+    - type: ConcatCDInput
+    - type: PackSegInputs
+    type: LEVIRCDDataset
+  num_workers: 4
+  persistent_workers: true
+  sampler:
+    shuffle: false
+    type: DefaultSampler
+test_evaluator:
+  iou_metrics:
+  - mIoU
+  type: IoUMetric
+test_pipeline:
+- type: LoadMultipleRSImageFromFile
+- type: LoadAnnotations
+- type: ConcatCDInput
+- type: PackSegInputs
+train_dataloader:
+  batch_size: 4
+  dataset:
+    data_prefix:
+      img_path: train/A
+      img_path2: train/B
+      seg_map_path: train/label
+    data_root: data/LEVIRCD
+    pipeline:
+    - type: LoadMultipleRSImageFromFile
+    - type: LoadAnnotations
+    - transforms:
+      - p: 0.2
+        type: RandomBrightnessContrast
+      - p: 0.5
+        type: HorizontalFlip
+      - p: 0.5
+        type: VerticalFlip
+      type: Albu
+    - type: ConcatCDInput
+    - type: PackSegInputs
+    type: LEVIRCDDataset
+  num_workers: 4
+  persistent_workers: true
+  sampler:
+    shuffle: true
+    type: InfiniteSampler
+train_pipeline:
+- type: LoadMultipleRSImageFromFile
+- type: LoadAnnotations
+- transforms:
+  - p: 0.2
+    type: RandomBrightnessContrast
+  - p: 0.5
+    type: HorizontalFlip
+  - p: 0.5
+    type: VerticalFlip
+  type: Albu
+- type: ConcatCDInput
+- type: PackSegInputs
+tta_pipeline:
+- type: LoadMultipleRSImageFromFile
+- transforms:
+  - - type: LoadAnnotations
+  - - type: ConcatCDInput
+  - - type: PackSegInputs
+  type: TestTimeAug
+val_dataloader:
+  batch_size: 1
+  dataset:
+    data_prefix:
+      img_path: test/A
+      img_path2: test/B
+      seg_map_path: test/label
+    data_root: data/LEVIRCD
+    pipeline:
+    - type: LoadMultipleRSImageFromFile
+    - type: LoadAnnotations
+    - type: ConcatCDInput
+    - type: PackSegInputs
+    type: LEVIRCDDataset
+  num_workers: 4
+  persistent_workers: true
+  sampler:
+    shuffle: false
+    type: DefaultSampler
+val_evaluator:
+  iou_metrics:
+  - mIoU
+  type: IoUMetric

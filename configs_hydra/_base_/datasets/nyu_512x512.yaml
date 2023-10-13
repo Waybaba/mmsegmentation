@@ -1,0 +1,150 @@
+# @package _global_
+data_root: data/nyu
+dataset_type: NYUDataset
+test_dataloader:
+  batch_size: 1
+  dataset:
+    data_prefix:
+      depth_map_path: annotations/test
+      img_path: images/test
+    data_root: data/nyu
+    pipeline:
+    - type: LoadImageFromFile
+    - keep_ratio: true
+      scale: &id001
+        _args_:
+        - - 2048
+          - 512
+        _target_: builtins.tuple
+      type: Resize
+    - depth_rescale_factor: 0.001
+      type: LoadDepthAnnotation
+    - meta_keys: &id002
+        _args_:
+        - - img_path
+          - depth_map_path
+          - ori_shape
+          - img_shape
+          - pad_shape
+          - scale_factor
+          - flip
+          - flip_direction
+          - category_id
+        _target_: builtins.tuple
+      type: PackSegInputs
+    test_mode: true
+    type: NYUDataset
+  num_workers: 4
+  persistent_workers: true
+  sampler:
+    shuffle: false
+    type: DefaultSampler
+test_evaluator:
+  crop_type: nyu_crop
+  max_depth_eval: 10.0
+  min_depth_eval: 0.001
+  type: DepthMetric
+test_pipeline:
+- type: LoadImageFromFile
+- keep_ratio: true
+  scale: *id001
+  type: Resize
+- depth_rescale_factor: 0.001
+  type: LoadDepthAnnotation
+- meta_keys: *id002
+  type: PackSegInputs
+train_dataloader:
+  batch_size: 8
+  dataset:
+    data_prefix:
+      depth_map_path: annotations/train
+      img_path: images/train
+    data_root: data/nyu
+    pipeline:
+    - type: LoadImageFromFile
+    - depth_rescale_factor: 0.001
+      type: LoadDepthAnnotation
+    - prob: 0.25
+      type: RandomDepthMix
+    - prob: 0.5
+      type: RandomFlip
+    - keep_ratio: true
+      ratio_range: &id003
+        _args_:
+        - - 0.8
+          - 1.5
+        _target_: builtins.tuple
+      scale: &id004
+        _args_:
+        - - 768
+          - 512
+        _target_: builtins.tuple
+      type: RandomResize
+    - crop_size: &id005
+        _args_:
+        - - 512
+          - 512
+        _target_: builtins.tuple
+      type: RandomCrop
+    - transforms:
+      - type: RandomBrightnessContrast
+      - type: RandomGamma
+      - type: HueSaturationValue
+      type: Albu
+    - meta_keys: *id002
+      type: PackSegInputs
+    type: NYUDataset
+  num_workers: 8
+  persistent_workers: true
+  sampler:
+    shuffle: true
+    type: InfiniteSampler
+train_pipeline:
+- type: LoadImageFromFile
+- depth_rescale_factor: 0.001
+  type: LoadDepthAnnotation
+- prob: 0.25
+  type: RandomDepthMix
+- prob: 0.5
+  type: RandomFlip
+- keep_ratio: true
+  ratio_range: *id003
+  scale: *id004
+  type: RandomResize
+- crop_size: *id005
+  type: RandomCrop
+- transforms:
+  - type: RandomBrightnessContrast
+  - type: RandomGamma
+  - type: HueSaturationValue
+  type: Albu
+- meta_keys: *id002
+  type: PackSegInputs
+val_dataloader:
+  batch_size: 1
+  dataset:
+    data_prefix:
+      depth_map_path: annotations/test
+      img_path: images/test
+    data_root: data/nyu
+    pipeline:
+    - type: LoadImageFromFile
+    - keep_ratio: true
+      scale: *id001
+      type: Resize
+    - depth_rescale_factor: 0.001
+      type: LoadDepthAnnotation
+    - meta_keys: *id002
+      type: PackSegInputs
+    test_mode: true
+    type: NYUDataset
+  num_workers: 4
+  persistent_workers: true
+  sampler:
+    shuffle: false
+    type: DefaultSampler
+val_evaluator:
+  crop_type: nyu_crop
+  max_depth_eval: 10.0
+  min_depth_eval: 0.001
+  type: DepthMetric

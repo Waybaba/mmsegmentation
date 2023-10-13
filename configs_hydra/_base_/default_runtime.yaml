@@ -1,0 +1,35 @@
+# @package _global_
+default_scope: mmseg
+env_cfg:
+  cudnn_benchmark: true
+  dist_cfg:
+    backend: nccl
+  mp_cfg:
+    mp_start_method: fork
+    opencv_num_threads: 0
+load_from: null
+log_level: INFO
+log_processor:
+  by_epoch: false
+resume: false
+tta_model:
+  type: SegTTAModel
+vis_backends:
+- type: LocalVisBackend
+- init_kwargs:
+    mode: online
+    project: MMSEG
+    tags:
+    - test
+  type: WandbVisBackend
+visualizer:
+  name: visualizer
+  type: SegLocalVisualizer
+  vis_backends:
+  - type: LocalVisBackend
+  - init_kwargs:
+      mode: online
+      project: MMSEG
+      tags:
+      - test
+    type: WandbVisBackend

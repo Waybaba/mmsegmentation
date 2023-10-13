@@ -1,0 +1,155 @@
+# @package _global_
+crop_size: &id002
+  _args_:
+  - - 640
+    - 640
+  _target_: builtins.tuple
+data_root: data/ade/ADEChallengeData2016
+dataset_type: ADE20KDataset
+img_ratios:
+- 0.5
+- 0.75
+- 1.0
+- 1.25
+- 1.5
+- 1.75
+test_dataloader:
+  batch_size: 1
+  dataset:
+    data_prefix:
+      img_path: images/validation
+      seg_map_path: annotations/validation
+    data_root: data/ade/ADEChallengeData2016
+    pipeline:
+    - type: LoadImageFromFile
+    - keep_ratio: true
+      scale: &id001
+        _args_:
+        - - 2560
+          - 640
+        _target_: builtins.tuple
+      type: Resize
+    - reduce_zero_label: true
+      type: LoadAnnotations
+    - type: PackSegInputs
+    type: ADE20KDataset
+  num_workers: 4
+  persistent_workers: true
+  sampler:
+    shuffle: false
+    type: DefaultSampler
+test_evaluator:
+  iou_metrics:
+  - mIoU
+  type: IoUMetric
+test_pipeline:
+- type: LoadImageFromFile
+- keep_ratio: true
+  scale: *id001
+  type: Resize
+- reduce_zero_label: true
+  type: LoadAnnotations
+- type: PackSegInputs
+train_dataloader:
+  batch_size: 4
+  dataset:
+    data_prefix:
+      img_path: images/training
+      seg_map_path: annotations/training
+    data_root: data/ade/ADEChallengeData2016
+    pipeline:
+    - type: LoadImageFromFile
+    - reduce_zero_label: true
+      type: LoadAnnotations
+    - keep_ratio: true
+      ratio_range: &id003
+        _args_:
+        - - 0.5
+          - 2.0
+        _target_: builtins.tuple
+      scale: *id001
+      type: RandomResize
+    - cat_max_ratio: 0.75
+      crop_size: *id002
+      type: RandomCrop
+    - prob: 0.5
+      type: RandomFlip
+    - type: PhotoMetricDistortion
+    - type: PackSegInputs
+    type: ADE20KDataset
+  num_workers: 4
+  persistent_workers: true
+  sampler:
+    shuffle: true
+    type: InfiniteSampler
+train_pipeline:
+- type: LoadImageFromFile
+- reduce_zero_label: true
+  type: LoadAnnotations
+- keep_ratio: true
+  ratio_range: *id003
+  scale: *id001
+  type: RandomResize
+- cat_max_ratio: 0.75
+  crop_size: *id002
+  type: RandomCrop
+- prob: 0.5
+  type: RandomFlip
+- type: PhotoMetricDistortion
+- type: PackSegInputs
+tta_pipeline:
+- backend_args: null
+  type: LoadImageFromFile
+- transforms:
+  - - keep_ratio: true
+      scale_factor: 0.5
+      type: Resize
+    - keep_ratio: true
+      scale_factor: 0.75
+      type: Resize
+    - keep_ratio: true
+      scale_factor: 1.0
+      type: Resize
+    - keep_ratio: true
+      scale_factor: 1.25
+      type: Resize
+    - keep_ratio: true
+      scale_factor: 1.5
+      type: Resize
+    - keep_ratio: true
+      scale_factor: 1.75
+      type: Resize
+  - - direction: horizontal
+      prob: 0.0
+      type: RandomFlip
+    - direction: horizontal
+      prob: 1.0
+      type: RandomFlip
+  - - type: LoadAnnotations
+  - - type: PackSegInputs
+  type: TestTimeAug
+val_dataloader:
+  batch_size: 1
+  dataset:
+    data_prefix:
+      img_path: images/validation
+      seg_map_path: annotations/validation
+    data_root: data/ade/ADEChallengeData2016
+    pipeline:
+    - type: LoadImageFromFile
+    - keep_ratio: true
+      scale: *id001
+      type: Resize
+    - reduce_zero_label: true
+      type: LoadAnnotations
+    - type: PackSegInputs
+    type: ADE20KDataset
+  num_workers: 4
+  persistent_workers: true
+  sampler:
+    shuffle: false
+    type: DefaultSampler
+val_evaluator:
+  iou_metrics:
+  - mIoU
+  type: IoUMetric

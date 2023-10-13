@@ -1,0 +1,100 @@
+# @package _global_
+checkpoint_file: https://download.openmmlab.com/mmclassification/v0/poolformer/poolformer-s12_3rdparty_32xb128_in1k_20220414-f8d83051.pth
+custom_imports:
+  allow_failed_imports: false
+  imports:
+  - mmpretrain.models
+data_preprocessor:
+  bgr_to_rgb: true
+  mean:
+  - 123.675
+  - 116.28
+  - 103.53
+  pad_val: 0
+  seg_pad_val: 255
+  std:
+  - 58.395
+  - 57.12
+  - 57.375
+  type: SegDataPreProcessor
+model:
+  backbone:
+    arch: s12
+    down_pad: 1
+    down_patch_size: 3
+    down_stride: 2
+    drop_path_rate: 0.0
+    drop_rate: 0.0
+    frozen_stages: 0
+    in_pad: 2
+    in_patch_size: 7
+    in_stride: 4
+    init_cfg:
+      checkpoint: https://download.openmmlab.com/mmclassification/v0/poolformer/poolformer-s12_3rdparty_32xb128_in1k_20220414-f8d83051.pth
+      prefix: backbone.
+      type: Pretrained
+    out_indices:
+      _args_:
+      - - 0
+        - 2
+        - 4
+        - 6
+      _target_: builtins.tuple
+    type: mmpretrain.PoolFormer
+  data_preprocessor:
+    bgr_to_rgb: true
+    mean:
+    - 123.675
+    - 116.28
+    - 103.53
+    pad_val: 0
+    seg_pad_val: 255
+    std:
+    - 58.395
+    - 57.12
+    - 57.375
+    type: SegDataPreProcessor
+  decode_head:
+    align_corners: false
+    channels: 128
+    dropout_ratio: 0.1
+    feature_strides:
+    - 4
+    - 8
+    - 16
+    - 32
+    in_channels:
+    - 256
+    - 256
+    - 256
+    - 256
+    in_index:
+    - 0
+    - 1
+    - 2
+    - 3
+    loss_decode:
+      loss_weight: 1.0
+      type: CrossEntropyLoss
+      use_sigmoid: false
+    norm_cfg:
+      requires_grad: true
+      type: SyncBN
+    num_classes: 19
+    type: FPNHead
+  neck:
+    in_channels:
+    - 256
+    - 512
+    - 1024
+    - 2048
+    num_outs: 4
+    out_channels: 256
+    type: FPN
+  test_cfg:
+    mode: whole
+  train_cfg: {}
+  type: EncoderDecoder
+norm_cfg:
+  requires_grad: true
+  type: SyncBN

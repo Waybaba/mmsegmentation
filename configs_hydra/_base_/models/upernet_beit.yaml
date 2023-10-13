@@ -1,0 +1,121 @@
+# @package _global_
+data_preprocessor:
+  bgr_to_rgb: true
+  mean:
+  - 123.675
+  - 116.28
+  - 103.53
+  pad_val: 0
+  seg_pad_val: 255
+  std:
+  - 58.395
+  - 57.12
+  - 57.375
+  type: SegDataPreProcessor
+model:
+  auxiliary_head:
+    align_corners: false
+    channels: 256
+    concat_input: false
+    dropout_ratio: 0.1
+    in_channels: 768
+    in_index: 2
+    loss_decode:
+      loss_weight: 0.4
+      type: CrossEntropyLoss
+      use_sigmoid: false
+    norm_cfg:
+      requires_grad: true
+      type: SyncBN
+    num_classes: 150
+    num_convs: 1
+    type: FCNHead
+  backbone:
+    act_cfg:
+      type: GELU
+    attn_drop_rate: 0.0
+    drop_path_rate: 0.1
+    embed_dims: 768
+    img_size:
+      _args_:
+      - - 640
+        - 640
+      _target_: builtins.tuple
+    in_channels: 3
+    init_values: 0.1
+    mlp_ratio: 4
+    norm_cfg:
+      eps: 1.0e-06
+      type: LN
+    norm_eval: false
+    num_heads: 12
+    num_layers: 12
+    out_indices:
+      _args_:
+      - - 3
+        - 5
+        - 7
+        - 11
+      _target_: builtins.tuple
+    patch_size: 16
+    qv_bias: true
+    type: BEiT
+  data_preprocessor:
+    bgr_to_rgb: true
+    mean:
+    - 123.675
+    - 116.28
+    - 103.53
+    pad_val: 0
+    seg_pad_val: 255
+    std:
+    - 58.395
+    - 57.12
+    - 57.375
+    type: SegDataPreProcessor
+  decode_head:
+    align_corners: false
+    channels: 768
+    dropout_ratio: 0.1
+    in_channels:
+    - 768
+    - 768
+    - 768
+    - 768
+    in_index:
+    - 0
+    - 1
+    - 2
+    - 3
+    loss_decode:
+      loss_weight: 1.0
+      type: CrossEntropyLoss
+      use_sigmoid: false
+    norm_cfg:
+      requires_grad: true
+      type: SyncBN
+    num_classes: 150
+    pool_scales:
+      _args_:
+      - - 1
+        - 2
+        - 3
+        - 6
+      _target_: builtins.tuple
+    type: UPerHead
+  neck:
+    embed_dim: 768
+    rescales:
+    - 4
+    - 2
+    - 1
+    - 0.5
+    type: Feature2Pyramid
+  pretrained: null
+  test_cfg:
+    mode: whole
+  train_cfg: {}
+  type: EncoderDecoder
+norm_cfg:
+  requires_grad: true
+  type: SyncBN

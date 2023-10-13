@@ -1,0 +1,102 @@
+# @package _global_
+data_preprocessor:
+  bgr_to_rgb: true
+  mean:
+  - 72.39239876
+  - 82.90891754
+  - 73.15835921
+  pad_val: 0
+  seg_pad_val: 255
+  std:
+  - 1
+  - 1
+  - 1
+  type: SegDataPreProcessor
+model:
+  backbone:
+    dilations:
+      _args_:
+      - - 2
+        - 4
+      _target_: builtins.tuple
+    in_channels: 3
+    norm_cfg:
+      eps: 0.001
+      requires_grad: true
+      type: SyncBN
+    num_blocks:
+      _args_:
+      - - 3
+        - 21
+      _target_: builtins.tuple
+    num_channels:
+      _args_:
+      - - 32
+        - 64
+        - 128
+      _target_: builtins.tuple
+    reductions:
+      _args_:
+      - - 8
+        - 16
+      _target_: builtins.tuple
+    type: CGNet
+  data_preprocessor:
+    bgr_to_rgb: true
+    mean:
+    - 72.39239876
+    - 82.90891754
+    - 73.15835921
+    pad_val: 0
+    seg_pad_val: 255
+    std:
+    - 1
+    - 1
+    - 1
+    type: SegDataPreProcessor
+  decode_head:
+    channels: 256
+    concat_input: false
+    dropout_ratio: 0
+    in_channels: 256
+    in_index: 2
+    loss_decode:
+      class_weight:
+      - 2.5959933
+      - 6.7415504
+      - 3.5354059
+      - 9.8663225
+      - 9.690899
+      - 9.369352
+      - 10.289121
+      - 9.953208
+      - 4.3097677
+      - 9.490387
+      - 7.674431
+      - 9.396905
+      - 10.347791
+      - 6.3927646
+      - 10.226669
+      - 10.241062
+      - 10.280587
+      - 10.396974
+      - 10.055647
+      loss_weight: 1.0
+      type: CrossEntropyLoss
+      use_sigmoid: false
+    norm_cfg:
+      eps: 0.001
+      requires_grad: true
+      type: SyncBN
+    num_classes: 19
+    num_convs: 0
+    type: FCNHead
+  test_cfg:
+    mode: whole
+  train_cfg:
+    sampler: null
+  type: EncoderDecoder
+norm_cfg:
+  eps: 0.001
+  requires_grad: true
+  type: SyncBN

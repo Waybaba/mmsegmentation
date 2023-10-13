@@ -1,0 +1,78 @@
+# @package _global_
+backbone_norm_cfg:
+  eps: 1.0e-06
+  requires_grad: true
+  type: LN
+checkpoint: https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/segmenter/vit_base_p16_384_20220308-96dfe169.pth
+data_preprocessor:
+  bgr_to_rgb: true
+  mean:
+  - 127.5
+  - 127.5
+  - 127.5
+  pad_val: 0
+  seg_pad_val: 255
+  std:
+  - 127.5
+  - 127.5
+  - 127.5
+  type: SegDataPreProcessor
+model:
+  backbone:
+    attn_drop_rate: 0.0
+    drop_path_rate: 0.1
+    drop_rate: 0.0
+    embed_dims: 768
+    final_norm: true
+    img_size: &id001
+      _args_:
+      - - 512
+        - 512
+      _target_: builtins.tuple
+    in_channels: 3
+    interpolate_mode: bicubic
+    norm_cfg:
+      eps: 1.0e-06
+      requires_grad: true
+      type: LN
+    num_heads: 12
+    num_layers: 12
+    patch_size: 16
+    type: VisionTransformer
+    with_cls_token: true
+  data_preprocessor:
+    bgr_to_rgb: true
+    mean:
+    - 127.5
+    - 127.5
+    - 127.5
+    pad_val: 0
+    seg_pad_val: 255
+    std:
+    - 127.5
+    - 127.5
+    - 127.5
+    type: SegDataPreProcessor
+  decode_head:
+    channels: 768
+    dropout_ratio: 0.0
+    embed_dims: 768
+    in_channels: 768
+    loss_decode:
+      loss_weight: 1.0
+      type: CrossEntropyLoss
+      use_sigmoid: false
+    num_classes: 150
+    num_heads: 12
+    num_layers: 2
+    type: SegmenterMaskTransformerHead
+  pretrained: https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/segmenter/vit_base_p16_384_20220308-96dfe169.pth
+  test_cfg:
+    crop_size: *id001
+    mode: slide
+    stride:
+      _args_:
+      - - 480
+        - 480
+      _target_: builtins.tuple
+  type: EncoderDecoder

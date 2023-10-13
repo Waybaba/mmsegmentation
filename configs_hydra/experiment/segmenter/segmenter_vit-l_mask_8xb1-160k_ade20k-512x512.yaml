@@ -1,0 +1,50 @@
+# @package _global_
+defaults:
+- /_base_/models/segmenter_vit-b16_mask.yaml
+- /_base_/datasets/ade20k_640x640.yaml
+- /_base_/default_runtime.yaml
+- /_base_/schedules/schedule_160k.yaml
+crop_size: &id001
+  _args_:
+  - - 640
+    - 640
+  _target_: builtins.tuple
+data_preprocessor:
+  size: *id001
+checkpoint: https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/segmenter/vit_large_p16_384_20220308-d4efb41d.pth
+model:
+  backbone:
+    embed_dims: 1024
+    img_size: *id001
+    num_heads: 16
+    num_layers: 24
+    type: VisionTransformer
+  data_preprocessor:
+    size: *id001
+  decode_head:
+    channels: 1024
+    embed_dims: 1024
+    in_channels: 1024
+    num_heads: 16
+    type: SegmenterMaskTransformerHead
+  pretrained: https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/segmenter/vit_large_p16_384_20220308-d4efb41d.pth
+  test_cfg:
+    crop_size: *id001
+    mode: slide
+    stride:
+      _args_:
+      - - 608
+        - 608
+      _target_: builtins.tuple
+optimizer:
+  lr: 0.001
+  weight_decay: 0.0
+optim_wrapper:
+  optimizer:
+    lr: 0.001
+    weight_decay: 0.0
+  type: OptimWrapper
+train_dataloader:
+  batch_size: 1
+val_dataloader:
+  batch_size: 1

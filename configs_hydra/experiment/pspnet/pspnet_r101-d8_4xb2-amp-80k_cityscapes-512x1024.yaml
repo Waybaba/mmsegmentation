@@ -1,0 +1,12 @@
+# @package _global_
+defaults:
+- ./pspnet_r101-d8_4xb2-80k_cityscapes-512x1024.yaml
+optim_wrapper:
+  _delete_: true
+  loss_scale: 512.0
+  optimizer:
+    lr: 0.01
+    momentum: 0.9
+    type: SGD
+    weight_decay: 0.0005
+  type: AmpOptimWrapper

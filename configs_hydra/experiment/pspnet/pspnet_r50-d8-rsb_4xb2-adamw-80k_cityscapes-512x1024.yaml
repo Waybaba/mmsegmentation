@@ -1,0 +1,47 @@
+# @package _global_
+defaults:
+- /_base_/models/pspnet_r50-d8.yaml
+- /_base_/datasets/cityscapes.yaml
+- /_base_/default_runtime.yaml
+- /_base_/schedules/schedule_80k.yaml
+crop_size: &id001
+  _args_:
+  - - 512
+    - 1024
+  _target_: builtins.tuple
+data_preprocessor:
+  size: *id001
+checkpoint: https://download.openmmlab.com/mmclassification/v0/resnet/resnet50_8xb256-rsb-a1-600e_in1k_20211228-20e21305.pth
+model:
+  backbone:
+    init_cfg:
+      checkpoint: https://download.openmmlab.com/mmclassification/v0/resnet/resnet50_8xb256-rsb-a1-600e_in1k_20211228-20e21305.pth
+      prefix: backbone.
+      type: Pretrained
+    type: ResNet
+  data_preprocessor:
+    size: *id001
+  pretrained: null
+optim_wrapper:
+  _delete_: true
+  clip_grad:
+    max_norm: 1
+    norm_type: 2
+  optimizer:
+    lr: 0.0005
+    type: AdamW
+    weight_decay: 0.05
+  type: OptimWrapper
+param_scheduler:
+- begin: 0
+  by_epoch: false
+  end: 1000
+  start_factor: 0.001
+  type: LinearLR
+- begin: 1000
+  by_epoch: false
+  end: 80000
+  milestones:
+  - 60000
+  - 72000
+  type: MultiStepLR

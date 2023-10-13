@@ -1,0 +1,20 @@
+# @package _global_
+defaults:
+- /_base_/models/pspnet_r50-d8.yaml
+- /_base_/datasets/ade20k.yaml
+- /_base_/default_runtime.yaml
+- /_base_/schedules/schedule_80k.yaml
+crop_size: &id001
+  _args_:
+  - - 512
+    - 512
+  _target_: builtins.tuple
+data_preprocessor:
+  size: *id001
+model:
+  auxiliary_head:
+    num_classes: 150
+  data_preprocessor:
+    size: *id001
+  decode_head:
+    num_classes: 150

@@ -1,0 +1,105 @@
+# @package _global_
+defaults:
+- ./segformer_mit-b0_8xb2-160k_ade20k-512x512.yaml
+checkpoint: https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/segformer/mit_b5_20220624-658746d9.pth
+crop_size: &id001
+  _args_:
+  - - 640
+    - 640
+  _target_: builtins.tuple
+data_preprocessor:
+  size: *id001
+train_pipeline:
+- type: LoadImageFromFile
+- reduce_zero_label: true
+  type: LoadAnnotations
+- keep_ratio: true
+  ratio_range: &id003
+    _args_:
+    - - 0.5
+      - 2.0
+    _target_: builtins.tuple
+  scale: &id002
+    _args_:
+    - - 2048
+      - 640
+    _target_: builtins.tuple
+  type: RandomResize
+- cat_max_ratio: 0.75
+  crop_size: *id001
+  type: RandomCrop
+- prob: 0.5
+  type: RandomFlip
+- type: PhotoMetricDistortion
+- type: PackSegInputs
+test_pipeline:
+- type: LoadImageFromFile
+- keep_ratio: true
+  scale: *id002
+  type: Resize
+- reduce_zero_label: true
+  type: LoadAnnotations
+- type: PackSegInputs
+train_dataloader:
+  dataset:
+    pipeline:
+    - type: LoadImageFromFile
+    - reduce_zero_label: true
+      type: LoadAnnotations
+    - keep_ratio: true
+      ratio_range: *id003
+      scale: *id002
+      type: RandomResize
+    - cat_max_ratio: 0.75
+      crop_size: *id001
+      type: RandomCrop
+    - prob: 0.5
+      type: RandomFlip
+    - type: PhotoMetricDistortion
+    - type: PackSegInputs
+val_dataloader:
+  batch_size: 1
+  dataset:
+    pipeline:
+    - type: LoadImageFromFile
+    - keep_ratio: true
+      scale: *id002
+      type: Resize
+    - reduce_zero_label: true
+      type: LoadAnnotations
+    - type: PackSegInputs
+test_dataloader:
+  batch_size: 1
+  dataset:
+    pipeline:
+    - type: LoadImageFromFile
+    - keep_ratio: true
+      scale: *id002
+      type: Resize
+    - reduce_zero_label: true
+      type: LoadAnnotations
+    - type: PackSegInputs
+model:
+  backbone:
+    embed_dims: 64
+    init_cfg:
+      checkpoint: https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/segformer/mit_b5_20220624-658746d9.pth
+      type: Pretrained
+    num_heads:
+    - 1
+    - 2
+    - 5
+    - 8
+    num_layers:
+    - 3
+    - 6
+    - 40
+    - 3
+  data_preprocessor:
+    size: *id001
+  decode_head:
+    in_channels:
+    - 64
+    - 128
+    - 320
+    - 512

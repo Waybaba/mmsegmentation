@@ -1,0 +1,17 @@
+# @package _global_
+defaults:
+- ./segmenter_vit-s_mask_8xb1-160k_ade20k-512x512.yaml
+model:
+  decode_head:
+    _delete_: true
+    channels: 384
+    concat_input: false
+    dropout_ratio: 0.0
+    in_channels: 384
+    loss_decode:
+      loss_weight: 1.0
+      type: CrossEntropyLoss
+      use_sigmoid: false
+    num_classes: 150
+    num_convs: 0
+    type: FCNHead

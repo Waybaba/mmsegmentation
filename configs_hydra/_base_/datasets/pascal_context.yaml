@@ -1,0 +1,116 @@
+# @package _global_
+crop_size: &id002
+  _args_:
+  - - 480
+    - 480
+  _target_: builtins.tuple
+data_root: data/VOCdevkit/VOC2010/
+dataset_type: PascalContextDataset
+img_scale: &id001
+  _args_:
+  - - 520
+    - 520
+  _target_: builtins.tuple
+test_dataloader:
+  batch_size: 1
+  dataset:
+    ann_file: ImageSets/SegmentationContext/val.txt
+    data_prefix:
+      img_path: JPEGImages
+      seg_map_path: SegmentationClassContext
+    data_root: data/VOCdevkit/VOC2010/
+    pipeline:
+    - type: LoadImageFromFile
+    - keep_ratio: true
+      scale: *id001
+      type: Resize
+    - type: LoadAnnotations
+    - type: PackSegInputs
+    type: PascalContextDataset
+  num_workers: 4
+  persistent_workers: true
+  sampler:
+    shuffle: false
+    type: DefaultSampler
+test_evaluator:
+  iou_metrics:
+  - mIoU
+  type: IoUMetric
+test_pipeline:
+- type: LoadImageFromFile
+- keep_ratio: true
+  scale: *id001
+  type: Resize
+- type: LoadAnnotations
+- type: PackSegInputs
+train_dataloader:
+  batch_size: 4
+  dataset:
+    ann_file: ImageSets/SegmentationContext/train.txt
+    data_prefix:
+      img_path: JPEGImages
+      seg_map_path: SegmentationClassContext
+    data_root: data/VOCdevkit/VOC2010/
+    pipeline:
+    - type: LoadImageFromFile
+    - type: LoadAnnotations
+    - keep_ratio: true
+      ratio_range: &id003
+        _args_:
+        - - 0.5
+          - 2.0
+        _target_: builtins.tuple
+      scale: *id001
+      type: RandomResize
+    - cat_max_ratio: 0.75
+      crop_size: *id002
+      type: RandomCrop
+    - prob: 0.5
+      type: RandomFlip
+    - type: PhotoMetricDistortion
+    - type: PackSegInputs
+    type: PascalContextDataset
+  num_workers: 4
+  persistent_workers: true
+  sampler:
+    shuffle: true
+    type: InfiniteSampler
+train_pipeline:
+- type: LoadImageFromFile
+- type: LoadAnnotations
+- keep_ratio: true
+  ratio_range: *id003
+  scale: *id001
+  type: RandomResize
+- cat_max_ratio: 0.75
+  crop_size: *id002
+  type: RandomCrop
+- prob: 0.5
+  type: RandomFlip
+- type: PhotoMetricDistortion
+- type: PackSegInputs
+val_dataloader:
+  batch_size: 1
+  dataset:
+    ann_file: ImageSets/SegmentationContext/val.txt
+    data_prefix:
+      img_path: JPEGImages
+      seg_map_path: SegmentationClassContext
+    data_root: data/VOCdevkit/VOC2010/
+    pipeline:
+    - type: LoadImageFromFile
+    - keep_ratio: true
+      scale: *id001
+      type: Resize
+    - type: LoadAnnotations
+    - type: PackSegInputs
+    type: PascalContextDataset
+  num_workers: 4
+  persistent_workers: true
+  sampler:
+    shuffle: false
+    type: DefaultSampler
+val_evaluator:
+  iou_metrics:
+  - mIoU
+  type: IoUMetric

@@ -1,0 +1,78 @@
+# @package _global_
+data_preprocessor:
+  bgr_to_rgb: true
+  mean:
+  - 123.675
+  - 116.28
+  - 103.53
+  pad_val: 0
+  seg_pad_val: 255
+  std:
+  - 58.395
+  - 57.12
+  - 57.375
+  type: SegDataPreProcessor
+model:
+  backbone:
+    arch: large
+    norm_cfg:
+      eps: 0.001
+      requires_grad: true
+      type: SyncBN
+    out_indices:
+      _args_:
+      - - 1
+        - 3
+        - 16
+      _target_: builtins.tuple
+    type: MobileNetV3
+  data_preprocessor:
+    bgr_to_rgb: true
+    mean:
+    - 123.675
+    - 116.28
+    - 103.53
+    pad_val: 0
+    seg_pad_val: 255
+    std:
+    - 58.395
+    - 57.12
+    - 57.375
+    type: SegDataPreProcessor
+  decode_head:
+    act_cfg:
+      type: ReLU
+    align_corners: false
+    channels: 128
+    dropout_ratio: 0.1
+    in_channels:
+      _args_:
+      - - 16
+        - 24
+        - 960
+      _target_: builtins.tuple
+    in_index:
+      _args_:
+      - - 0
+        - 1
+        - 2
+      _target_: builtins.tuple
+    input_transform: multiple_select
+    loss_decode:
+      loss_weight: 1.0
+      type: CrossEntropyLoss
+      use_sigmoid: false
+    norm_cfg:
+      eps: 0.001
+      requires_grad: true
+      type: SyncBN
+    num_classes: 19
+    type: LRASPPHead
+  test_cfg:
+    mode: whole
+  train_cfg: {}
+  type: EncoderDecoder
+norm_cfg:
+  eps: 0.001
+  requires_grad: true
+  type: SyncBN

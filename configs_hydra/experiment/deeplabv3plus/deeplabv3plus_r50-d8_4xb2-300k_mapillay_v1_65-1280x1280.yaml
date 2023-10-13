@@ -1,0 +1,84 @@
+# @package _global_
+defaults:
+- /_base_/models/deeplabv3plus_r50-d8.yaml
+- /_base_/datasets/mapillary_v1_65.yaml
+- /_base_/default_runtime.yaml
+crop_size: &id001
+  _args_:
+  - - 1280
+    - 1280
+  _target_: builtins.tuple
+data_preprocessor:
+  size: *id001
+model:
+  auxiliary_head:
+    num_classes: 65
+  backbone:
+    depth: 50
+  data_preprocessor:
+    size: *id001
+  decode_head:
+    num_classes: 65
+  pretrained: open-mmlab://resnet50_v1c
+iters: 300000
+optimizer:
+  betas: &id002
+    _args_:
+    - - 0.9
+      - 0.999
+    _target_: builtins.tuple
+  lr: 0.0001
+  type: AdamW
+  weight_decay: 0.0001
+optim_wrapper:
+  clip_grad:
+    max_norm: 0.01
+    norm_type: 2
+  optimizer:
+    betas: *id002
+    lr: 0.0001
+    type: AdamW
+    weight_decay: 0.0001
+  paramwise_cfg:
+    custom_keys:
+      backbone:
+        decay_mult: 1.0
+        lr_mult: 0.1
+  type: OptimWrapper
+param_scheduler:
+- begin: 0
+  by_epoch: false
+  end: 300000
+  eta_min: 0
+  power: 0.9
+  type: PolyLR
+train_cfg:
+  max_iters: 300000
+  type: IterBasedTrainLoop
+  val_interval: 30000
+val_cfg:
+  type: ValLoop
+test_cfg:
+  type: TestLoop
+default_hooks:
+  checkpoint:
+    by_epoch: false
+    interval: 30000
+    type: CheckpointHook
+  logger:
+    interval: 50
+    log_metric_by_epoch: false
+    type: LoggerHook
+  param_scheduler:
+    type: ParamSchedulerHook
+  sampler_seed:
+    type: DistSamplerSeedHook
+  timer:
+    type: IterTimerHook
+  visualization:
+    type: SegVisualizationHook
+train_dataloader:
+  batch_size: 2
+auto_scale_lr:
+  base_batch_size: 8
+  enable: false

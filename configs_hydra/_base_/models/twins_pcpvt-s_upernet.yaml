@@ -1,0 +1,140 @@
+# @package _global_
+backbone_norm_cfg:
+  type: LN
+checkpoint: https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/twins/pcpvt_small_20220308-e638c41c.pth
+data_preprocessor:
+  bgr_to_rgb: true
+  mean:
+  - 123.675
+  - 116.28
+  - 103.53
+  pad_val: 0
+  seg_pad_val: 255
+  std:
+  - 58.395
+  - 57.12
+  - 57.375
+  type: SegDataPreProcessor
+model:
+  auxiliary_head:
+    align_corners: false
+    channels: 256
+    concat_input: false
+    dropout_ratio: 0.1
+    in_channels: 320
+    in_index: 2
+    loss_decode:
+      loss_weight: 0.4
+      type: CrossEntropyLoss
+      use_sigmoid: false
+    norm_cfg:
+      requires_grad: true
+      type: SyncBN
+    num_classes: 150
+    num_convs: 1
+    type: FCNHead
+  backbone:
+    attn_drop_rate: 0.0
+    depths:
+    - 3
+    - 4
+    - 6
+    - 3
+    drop_path_rate: 0.2
+    drop_rate: 0.0
+    embed_dims:
+    - 64
+    - 128
+    - 320
+    - 512
+    in_channels: 3
+    init_cfg:
+      checkpoint: https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/twins/pcpvt_small_20220308-e638c41c.pth
+      type: Pretrained
+    mlp_ratios:
+    - 8
+    - 8
+    - 4
+    - 4
+    norm_after_stage: false
+    norm_cfg:
+      type: LN
+    num_heads:
+    - 1
+    - 2
+    - 5
+    - 8
+    out_indices:
+      _args_:
+      - - 0
+        - 1
+        - 2
+        - 3
+      _target_: builtins.tuple
+    patch_sizes:
+    - 4
+    - 2
+    - 2
+    - 2
+    qkv_bias: true
+    sr_ratios:
+    - 8
+    - 4
+    - 2
+    - 1
+    strides:
+    - 4
+    - 2
+    - 2
+    - 2
+    type: PCPVT
+  data_preprocessor:
+    bgr_to_rgb: true
+    mean:
+    - 123.675
+    - 116.28
+    - 103.53
+    pad_val: 0
+    seg_pad_val: 255
+    std:
+    - 58.395
+    - 57.12
+    - 57.375
+    type: SegDataPreProcessor
+  decode_head:
+    align_corners: false
+    channels: 512
+    dropout_ratio: 0.1
+    in_channels:
+    - 64
+    - 128
+    - 320
+    - 512
+    in_index:
+    - 0
+    - 1
+    - 2
+    - 3
+    loss_decode:
+      loss_weight: 1.0
+      type: CrossEntropyLoss
+      use_sigmoid: false
+    norm_cfg:
+      requires_grad: true
+      type: SyncBN
+    num_classes: 150
+    pool_scales:
+      _args_:
+      - - 1
+        - 2
+        - 3
+        - 6
+      _target_: builtins.tuple
+    type: UPerHead
+  test_cfg:
+    mode: whole
+  train_cfg: {}
+  type: EncoderDecoder
+norm_cfg:
+  requires_grad: true
+  type: SyncBN

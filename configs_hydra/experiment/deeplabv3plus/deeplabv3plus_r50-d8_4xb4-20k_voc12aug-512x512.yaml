@@ -1,0 +1,20 @@
+# @package _global_
+defaults:
+- /_base_/models/deeplabv3plus_r50-d8.yaml
+- /_base_/datasets/pascal_voc12_aug.yaml
+- /_base_/default_runtime.yaml
+- /_base_/schedules/schedule_20k.yaml
+crop_size: &id001
+  _args_:
+  - - 512
+    - 512
+  _target_: builtins.tuple
+data_preprocessor:
+  size: *id001
+model:
+  auxiliary_head:
+    num_classes: 21
+  data_preprocessor:
+    size: *id001
+  decode_head:
+    num_classes: 21

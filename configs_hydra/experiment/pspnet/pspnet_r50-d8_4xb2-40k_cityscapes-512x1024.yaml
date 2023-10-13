@@ -1,0 +1,16 @@
+# @package _global_
+defaults:
+- /_base_/models/pspnet_r50-d8.yaml
+- /_base_/datasets/cityscapes.yaml
+- /_base_/default_runtime.yaml
+- /_base_/schedules/schedule_40k.yaml
+crop_size: &id001
+  _args_:
+  - - 512
+    - 1024
+  _target_: builtins.tuple
+data_preprocessor:
+  size: *id001
+model:
+  data_preprocessor:
+    size: *id001

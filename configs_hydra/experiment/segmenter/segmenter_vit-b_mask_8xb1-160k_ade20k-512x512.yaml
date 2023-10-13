@@ -1,0 +1,28 @@
+# @package _global_
+defaults:
+- /_base_/models/segmenter_vit-b16_mask.yaml
+- /_base_/datasets/ade20k.yaml
+- /_base_/default_runtime.yaml
+- /_base_/schedules/schedule_160k.yaml
+crop_size: &id001
+  _args_:
+  - - 512
+    - 512
+  _target_: builtins.tuple
+data_preprocessor:
+  size: *id001
+model:
+  data_preprocessor:
+    size: *id001
+optimizer:
+  lr: 0.001
+  weight_decay: 0.0
+optim_wrapper:
+  optimizer:
+    lr: 0.001
+    weight_decay: 0.0
+  type: OptimWrapper
+train_dataloader:
+  batch_size: 1
+val_dataloader:
+  batch_size: 1

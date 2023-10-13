@@ -1,0 +1,132 @@
+# @package _global_
+data_preprocessor:
+  bgr_to_rgb: true
+  mean:
+  - 123.675
+  - 116.28
+  - 103.53
+  pad_val: 0
+  seg_pad_val: 255
+  std:
+  - 58.395
+  - 57.12
+  - 57.375
+  type: SegDataPreProcessor
+model:
+  backbone:
+    extra:
+      stage1:
+        block: BOTTLENECK
+        num_blocks:
+          _args_:
+          - - 4
+          _target_: builtins.tuple
+        num_branches: 1
+        num_channels:
+          _args_:
+          - - 64
+          _target_: builtins.tuple
+        num_modules: 1
+      stage2:
+        block: BASIC
+        num_blocks:
+          _args_:
+          - - 4
+            - 4
+          _target_: builtins.tuple
+        num_branches: 2
+        num_channels:
+          _args_:
+          - - 18
+            - 36
+          _target_: builtins.tuple
+        num_modules: 1
+      stage3:
+        block: BASIC
+        num_blocks:
+          _args_:
+          - - 4
+            - 4
+            - 4
+          _target_: builtins.tuple
+        num_branches: 3
+        num_channels:
+          _args_:
+          - - 18
+            - 36
+            - 72
+          _target_: builtins.tuple
+        num_modules: 4
+      stage4:
+        block: BASIC
+        num_blocks:
+          _args_:
+          - - 4
+            - 4
+            - 4
+            - 4
+          _target_: builtins.tuple
+        num_branches: 4
+        num_channels:
+          _args_:
+          - - 18
+            - 36
+            - 72
+            - 144
+          _target_: builtins.tuple
+        num_modules: 3
+    norm_cfg:
+      requires_grad: true
+      type: SyncBN
+    norm_eval: false
+    type: HRNet
+  data_preprocessor:
+    bgr_to_rgb: true
+    mean:
+    - 123.675
+    - 116.28
+    - 103.53
+    pad_val: 0
+    seg_pad_val: 255
+    std:
+    - 58.395
+    - 57.12
+    - 57.375
+    type: SegDataPreProcessor
+  decode_head:
+    align_corners: false
+    channels: 270
+    concat_input: false
+    dropout_ratio: -1
+    in_channels:
+    - 18
+    - 36
+    - 72
+    - 144
+    in_index:
+      _args_:
+      - - 0
+        - 1
+        - 2
+        - 3
+      _target_: builtins.tuple
+    input_transform: resize_concat
+    kernel_size: 1
+    loss_decode:
+      loss_weight: 1.0
+      type: CrossEntropyLoss
+      use_sigmoid: false
+    norm_cfg:
+      requires_grad: true
+      type: SyncBN
+    num_classes: 19
+    num_convs: 1
+    type: FCNHead
+  pretrained: open-mmlab://msra/hrnetv2_w18
+  test_cfg:
+    mode: whole
+  train_cfg: {}
+  type: EncoderDecoder
+norm_cfg:
+  requires_grad: true
+  type: SyncBN

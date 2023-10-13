@@ -1,0 +1,54 @@
+# @package _global_
+default_hooks:
+  checkpoint:
+    by_epoch: false
+    interval: 2000
+    type: CheckpointHook
+  logger:
+    interval: 50
+    log_metric_by_epoch: false
+    type: LoggerHook
+  param_scheduler:
+    type: ParamSchedulerHook
+  sampler_seed:
+    type: DistSamplerSeedHook
+  timer:
+    type: IterTimerHook
+  visualization:
+    type: SegVisualizationHook
+optim_wrapper:
+  clip_grad: null
+  optimizer:
+    lr: 0.001
+    type: AdamW
+    weight_decay: 0.1
+  type: OptimWrapper
+optimizer:
+  lr: 0.001
+  type: AdamW
+  weight_decay: 0.1
+param_scheduler:
+- begin: 0
+  by_epoch: false
+  end: 12000
+  start_factor: 0.03
+  type: LinearLR
+- begin: 12000
+  by_epoch: false
+  end: 24000
+  eta_min_ratio: 0.03
+  power: 0.9
+  type: PolyLRRatio
+- begin: 24000
+  by_epoch: false
+  end: 25000
+  factor: 1
+  type: ConstantLR
+test_cfg:
+  type: TestLoop
+train_cfg:
+  max_iters: 25000
+  type: IterBasedTrainLoop
+  val_interval: 1000
+val_cfg:
+  type: ValLoop

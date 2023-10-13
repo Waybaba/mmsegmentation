@@ -1,0 +1,227 @@
+# @package _global_
+crop_size: &id001
+  _args_:
+  - - 512
+    - 512
+  _target_: builtins.tuple
+data_root: data/VOCdevkit/VOC2012
+dataset_aug:
+  ann_file: ImageSets/Segmentation/aug.txt
+  data_prefix:
+    img_path: JPEGImages
+    seg_map_path: SegmentationClassAug
+  data_root: data/VOCdevkit/VOC2012
+  pipeline:
+  - type: LoadImageFromFile
+  - type: LoadAnnotations
+  - keep_ratio: true
+    ratio_range: &id002
+      _args_:
+      - - 0.5
+        - 2.0
+      _target_: builtins.tuple
+    scale: &id003
+      _args_:
+      - - 2048
+        - 512
+      _target_: builtins.tuple
+    type: RandomResize
+  - cat_max_ratio: 0.75
+    crop_size: *id001
+    type: RandomCrop
+  - prob: 0.5
+    type: RandomFlip
+  - type: PhotoMetricDistortion
+  - size: *id001
+    type: Pad
+  - type: PackSegInputs
+  type: PascalVOCDataset
+dataset_train:
+  ann_file: ImageSets/Segmentation/train.txt
+  data_prefix:
+    img_path: JPEGImages
+    seg_map_path: SegmentationClass
+  data_root: data/VOCdevkit/VOC2012
+  pipeline:
+  - type: LoadImageFromFile
+  - type: LoadAnnotations
+  - keep_ratio: true
+    ratio_range: *id002
+    scale: *id003
+    type: RandomResize
+  - cat_max_ratio: 0.75
+    crop_size: *id001
+    type: RandomCrop
+  - prob: 0.5
+    type: RandomFlip
+  - type: PhotoMetricDistortion
+  - size: *id001
+    type: Pad
+  - type: PackSegInputs
+  type: PascalVOCDataset
+dataset_type: PascalVOCDataset
+img_ratios:
+- 0.5
+- 0.75
+- 1.0
+- 1.25
+- 1.5
+- 1.75
+test_dataloader:
+  batch_size: 1
+  dataset:
+    ann_file: ImageSets/Segmentation/val.txt
+    data_prefix:
+      img_path: JPEGImages
+      seg_map_path: SegmentationClass
+    data_root: data/VOCdevkit/VOC2012
+    pipeline:
+    - type: LoadImageFromFile
+    - keep_ratio: true
+      scale: *id003
+      type: Resize
+    - type: LoadAnnotations
+    - type: PackSegInputs
+    type: PascalVOCDataset
+  num_workers: 4
+  persistent_workers: true
+  sampler:
+    shuffle: false
+    type: DefaultSampler
+test_evaluator:
+  iou_metrics:
+  - mIoU
+  type: IoUMetric
+test_pipeline:
+- type: LoadImageFromFile
+- keep_ratio: true
+  scale: *id003
+  type: Resize
+- type: LoadAnnotations
+- type: PackSegInputs
+train_dataloader:
+  batch_size: 4
+  dataset:
+    datasets:
+    - ann_file: ImageSets/Segmentation/train.txt
+      data_prefix:
+        img_path: JPEGImages
+        seg_map_path: SegmentationClass
+      data_root: data/VOCdevkit/VOC2012
+      pipeline:
+      - type: LoadImageFromFile
+      - type: LoadAnnotations
+      - keep_ratio: true
+        ratio_range: *id002
+        scale: *id003
+        type: RandomResize
+      - cat_max_ratio: 0.75
+        crop_size: *id001
+        type: RandomCrop
+      - prob: 0.5
+        type: RandomFlip
+      - type: PhotoMetricDistortion
+      - size: *id001
+        type: Pad
+      - type: PackSegInputs
+      type: PascalVOCDataset
+    - ann_file: ImageSets/Segmentation/aug.txt
+      data_prefix:
+        img_path: JPEGImages
+        seg_map_path: SegmentationClassAug
+      data_root: data/VOCdevkit/VOC2012
+      pipeline:
+      - type: LoadImageFromFile
+      - type: LoadAnnotations
+      - keep_ratio: true
+        ratio_range: *id002
+        scale: *id003
+        type: RandomResize
+      - cat_max_ratio: 0.75
+        crop_size: *id001
+        type: RandomCrop
+      - prob: 0.5
+        type: RandomFlip
+      - type: PhotoMetricDistortion
+      - size: *id001
+        type: Pad
+      - type: PackSegInputs
+      type: PascalVOCDataset
+    type: ConcatDataset
+  num_workers: 4
+  persistent_workers: true
+  sampler:
+    shuffle: true
+    type: InfiniteSampler
+train_pipeline:
+- type: LoadImageFromFile
+- type: LoadAnnotations
+- keep_ratio: true
+  ratio_range: *id002
+  scale: *id003
+  type: RandomResize
+- cat_max_ratio: 0.75
+  crop_size: *id001
+  type: RandomCrop
+- prob: 0.5
+  type: RandomFlip
+- type: PhotoMetricDistortion
+- size: *id001
+  type: Pad
+- type: PackSegInputs
+tta_pipeline:
+- backend_args: null
+  type: LoadImageFromFile
+- transforms:
+  - - keep_ratio: true
+      scale_factor: 0.5
+      type: Resize
+    - keep_ratio: true
+      scale_factor: 0.75
+      type: Resize
+    - keep_ratio: true
+      scale_factor: 1.0
+      type: Resize
+    - keep_ratio: true
+      scale_factor: 1.25
+      type: Resize
+    - keep_ratio: true
+      scale_factor: 1.5
+      type: Resize
+    - keep_ratio: true
+      scale_factor: 1.75
+      type: Resize
+  - - direction: horizontal
+      prob: 0.0
+      type: RandomFlip
+    - direction: horizontal
+      prob: 1.0
+      type: RandomFlip
+  - - type: LoadAnnotations
+  - - type: PackSegInputs
+  type: TestTimeAug
+val_dataloader:
+  batch_size: 1
+  dataset:
+    ann_file: ImageSets/Segmentation/val.txt
+    data_prefix:
+      img_path: JPEGImages
+      seg_map_path: SegmentationClass
+    data_root: data/VOCdevkit/VOC2012
+    pipeline:
+    - type: LoadImageFromFile
+    - keep_ratio: true
+      scale: *id003
+      type: Resize
+    - type: LoadAnnotations
+    - type: PackSegInputs
+    type: PascalVOCDataset
+  num_workers: 4
+  persistent_workers: true
+  sampler:
+    shuffle: false
+    type: DefaultSampler
+val_evaluator:
+  iou_metrics:
+  - mIoU
+  type: IoUMetric

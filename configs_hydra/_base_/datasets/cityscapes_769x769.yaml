@@ -1,0 +1,79 @@
+# @package _global_
+crop_size: &id002
+  _args_:
+  - - 769
+    - 769
+  _target_: builtins.tuple
+defaults:
+- ./cityscapes.yaml
+test_dataloader:
+  dataset:
+    pipeline:
+    - type: LoadImageFromFile
+    - keep_ratio: true
+      scale: &id001
+        _args_:
+        - - 2049
+          - 1025
+        _target_: builtins.tuple
+      type: Resize
+    - type: LoadAnnotations
+    - type: PackSegInputs
+test_evaluator:
+  iou_metrics:
+  - mIoU
+  type: IoUMetric
+test_pipeline:
+- type: LoadImageFromFile
+- keep_ratio: true
+  scale: *id001
+  type: Resize
+- type: LoadAnnotations
+- type: PackSegInputs
+train_dataloader:
+  dataset:
+    pipeline:
+    - type: LoadImageFromFile
+    - type: LoadAnnotations
+    - keep_ratio: true
+      ratio_range: &id003
+        _args_:
+        - - 0.5
+          - 2.0
+        _target_: builtins.tuple
+      scale: *id001
+      type: RandomResize
+    - cat_max_ratio: 0.75
+      crop_size: *id002
+      type: RandomCrop
+    - prob: 0.5
+      type: RandomFlip
+    - type: PhotoMetricDistortion
+    - type: PackSegInputs
+train_pipeline:
+- type: LoadImageFromFile
+- type: LoadAnnotations
+- keep_ratio: true
+  ratio_range: *id003
+  scale: *id001
+  type: RandomResize
+- cat_max_ratio: 0.75
+  crop_size: *id002
+  type: RandomCrop
+- prob: 0.5
+  type: RandomFlip
+- type: PhotoMetricDistortion
+- type: PackSegInputs
+val_dataloader:
+  dataset:
+    pipeline:
+    - type: LoadImageFromFile
+    - keep_ratio: true
+      scale: *id001
+      type: Resize
+    - type: LoadAnnotations
+    - type: PackSegInputs
+val_evaluator:
+  iou_metrics:
+  - mIoU
+  type: IoUMetric
