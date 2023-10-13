@@ -45,7 +45,7 @@ test: True
 ckpt_path: null
 
 # seed for random number generators in pytorch, numpy and python.random
-seed: null
+seed: 0
 
 # wandb:
 #   buf_dir: null # if null would just output in the $OUTPUT, would cause IO problem when mount cloud as path
@@ -61,3 +61,9 @@ wandb:
   mode: online
 
 n_jobs: 1
+
+
+
+### extra
+randomness:
+  seed: ${seed}
