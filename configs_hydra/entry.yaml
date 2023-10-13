@@ -57,4 +57,7 @@ work_dir: "${paths.output_dir}"
 
 device: "cuda"
 
+wandb:
+  mode: online
+
 n_jobs: 1

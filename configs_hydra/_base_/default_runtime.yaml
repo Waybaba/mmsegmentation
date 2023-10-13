@@ -14,22 +14,13 @@ log_processor:
 resume: false
 tta_model:
   type: SegTTAModel
-vis_backends:
-- type: LocalVisBackend
-- init_kwargs:
-    mode: online
-    project: MMSEG
-    tags:
-    - test
-  type: WandbVisBackend
 visualizer:
   name: visualizer
   type: SegLocalVisualizer
   vis_backends:
   - type: LocalVisBackend
   - init_kwargs:
-      mode: online
-      project: MMSEG
-      tags:
-      - test
+      mode: ${wandb.mode}
+      project: ${task_name}
+      tags: ${tags}
     type: WandbVisBackend

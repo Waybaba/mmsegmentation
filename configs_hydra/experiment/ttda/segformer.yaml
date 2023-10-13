@@ -1,14 +1,19 @@
 # @package _global_
+
 defaults:
 - /_base_/models: segformer_mit-b0.yaml
 - /_custom_/datasets: gta2cityscapes.yaml
 - /_base_/default_runtime.yaml
 - /_base_/schedules_nooptim: schedule_160k.yaml
 
+crop_size_list_: ??? # [512, 512] or [1024, 1024]
+stride_list_: ???
+
 crop_size: &id001
   _args_:
-  - ??? # e.g. [1024, 1024]
+  - ${crop_size_list_} # e.g. [1024, 1024]
   _target_: builtins.tuple
+
 data_preprocessor:
   size: ${crop_size}
 # checkpoint: https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/segformer/mit_b0_20220624-7e0fe6dd.pth
@@ -24,7 +29,7 @@ model:
     mode: slide
     stride:
       _args_:
-      - ??? # 0.75 * crop_size e.g. [768, 768]
+      - ${stride_list_} # 0.75 * crop_size e.g. [768, 768]
       _target_: builtins.tuple
 optim_wrapper:
   # _delete_: true
