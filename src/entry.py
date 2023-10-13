@@ -60,8 +60,8 @@ def main(cfg):
     cfg = cfg_with_parse_path
 
 
-    from mmengine.config import Config, DictAction
-    cfg_py = Config.fromfile("configs/segformer/segformer_mit-b0_8xb1-160k_cityscapes-1024x1024.py")
+    # from mmengine.config import Config, DictAction
+    # cfg_py = Config.fromfile("configs/segformer/segformer_mit-b0_8xb1-160k_cityscapes-1024x1024.py")
 
 
     # build the runner from config
