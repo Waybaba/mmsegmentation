@@ -1,0 +1,23 @@
+# @package _global_
+defaults:
+- daformer_conv1_mitb5.yaml
+norm_cfg:
+  requires_grad: true
+  type: BN
+model:
+  decode_head:
+    decoder_params:
+      fusion_cfg:
+        _delete_: true
+        act_cfg:
+          type: ReLU
+        dilations:
+          _args_:
+          - [1, 6, 12, 18]
+          _target_: builtins.tuple
+        norm_cfg:
+          requires_grad: true
+          type: BN
+        pool: false
+        sep: true
+        type: aspp

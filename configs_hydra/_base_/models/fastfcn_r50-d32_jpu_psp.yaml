@@ -1,16 +1,10 @@
 # @package _global_
 data_preprocessor:
   bgr_to_rgb: true
-  mean:
-  - 123.675
-  - 116.28
-  - 103.53
+  mean: [123.675, 116.28, 103.53]
   pad_val: 0
   seg_pad_val: 255
-  std:
-  - 58.395
-  - 57.12
-  - 57.375
+  std: [58.395, 57.12, 57.375]
   type: SegDataPreProcessor
 model:
   auxiliary_head:
@@ -35,10 +29,7 @@ model:
     depth: 50
     dilations:
       _args_:
-      - - 1
-        - 1
-        - 2
-        - 4
+      - [1, 1, 2, 4]
       _target_: builtins.tuple
     norm_cfg:
       requires_grad: true
@@ -47,31 +38,20 @@ model:
     num_stages: 4
     out_indices:
       _args_:
-      - - 1
-        - 2
-        - 3
+      - [1, 2, 3]
       _target_: builtins.tuple
     strides:
       _args_:
-      - - 1
-        - 2
-        - 2
-        - 2
+      - [1, 2, 2, 2]
       _target_: builtins.tuple
     style: pytorch
     type: ResNetV1c
   data_preprocessor:
     bgr_to_rgb: true
-    mean:
-    - 123.675
-    - 116.28
-    - 103.53
+    mean: [123.675, 116.28, 103.53]
     pad_val: 0
     seg_pad_val: 255
-    std:
-    - 58.395
-    - 57.12
-    - 57.375
+    std: [58.395, 57.12, 57.375]
     type: SegDataPreProcessor
   decode_head:
     align_corners: false
@@ -89,27 +69,19 @@ model:
     num_classes: 19
     pool_scales:
       _args_:
-      - - 1
-        - 2
-        - 3
-        - 6
+      - [1, 2, 3, 6]
       _target_: builtins.tuple
     type: PSPHead
   neck:
     align_corners: false
     dilations:
       _args_:
-      - - 1
-        - 2
-        - 4
-        - 8
+      - [1, 2, 4, 8]
       _target_: builtins.tuple
     end_level: -1
     in_channels:
       _args_:
-      - - 512
-        - 1024
-        - 2048
+      - [512, 1024, 2048]
       _target_: builtins.tuple
     mid_channels: 512
     norm_cfg:

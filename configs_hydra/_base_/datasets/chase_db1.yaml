@@ -1,22 +1,14 @@
 # @package _global_
 crop_size: &id002
   _args_:
-  - - 128
-    - 128
+  - [128, 128]
   _target_: builtins.tuple
 data_root: data/CHASE_DB1
 dataset_type: ChaseDB1Dataset
-img_ratios:
-- 0.5
-- 0.75
-- 1.0
-- 1.25
-- 1.5
-- 1.75
+img_ratios: [0.5, 0.75, 1.0, 1.25, 1.5, 1.75]
 img_scale: &id001
   _args_:
-  - - 960
-    - 999
+  - [960, 999]
   _target_: builtins.tuple
 test_dataloader:
   batch_size: 1
@@ -63,8 +55,7 @@ train_dataloader:
       - keep_ratio: true
         ratio_range: &id003
           _args_:
-          - - 0.5
-            - 2.0
+          - [0.5, 2.0]
           _target_: builtins.tuple
         scale: *id001
         type: RandomResize

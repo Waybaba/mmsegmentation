@@ -1,16 +1,10 @@
 # @package _global_
 data_preprocessor:
   bgr_to_rgb: true
-  mean:
-  - 123.675
-  - 116.28
-  - 103.53
+  mean: [123.675, 116.28, 103.53]
   pad_val: 0
   seg_pad_val: 255
-  std:
-  - 58.395
-  - 57.12
-  - 57.375
+  std: [58.395, 57.12, 57.375]
   type: SegDataPreProcessor
 model:
   auxiliary_head:
@@ -79,11 +73,7 @@ model:
       bottleneck_type: cat
       channels:
         _args_:
-        - - 32
-          - 64
-          - 256
-          - 512
-          - 1024
+        - [32, 64, 256, 512, 1024]
         _target_: builtins.tuple
       in_channels: 3
       norm_cfg:
@@ -99,23 +89,16 @@ model:
       scale_factor: 4
     last_in_channels:
       _args_:
-      - - 1024
-        - 512
+      - [1024, 512]
       _target_: builtins.tuple
     out_channels: 128
     type: STDCContextPathNet
   data_preprocessor:
     bgr_to_rgb: true
-    mean:
-    - 123.675
-    - 116.28
-    - 103.53
+    mean: [123.675, 116.28, 103.53]
     pad_val: 0
     seg_pad_val: 255
-    std:
-    - 58.395
-    - 57.12
-    - 57.375
+    std: [58.395, 57.12, 57.375]
     type: SegDataPreProcessor
   decode_head:
     align_corners: true

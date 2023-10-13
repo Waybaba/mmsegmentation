@@ -1,16 +1,10 @@
 # @package _global_
 data_preprocessor:
   bgr_to_rgb: true
-  mean:
-  - 123.675
-  - 116.28
-  - 103.53
+  mean: [123.675, 116.28, 103.53]
   pad_val: 0
   seg_pad_val: 255
-  std:
-  - 58.395
-  - 57.12
-  - 57.375
+  std: [58.395, 57.12, 57.375]
   type: SegDataPreProcessor
 model:
   auxiliary_head:
@@ -39,8 +33,7 @@ model:
     embed_dims: 768
     img_size:
       _args_:
-      - - 512
-        - 512
+      - [512, 512]
       _target_: builtins.tuple
     in_channels: 3
     interpolate_mode: bicubic
@@ -53,10 +46,7 @@ model:
     num_layers: 12
     out_indices:
       _args_:
-      - - 2
-        - 5
-        - 8
-        - 11
+      - [2, 5, 8, 11]
       _target_: builtins.tuple
     patch_size: 16
     qkv_bias: true
@@ -64,31 +54,17 @@ model:
     with_cls_token: true
   data_preprocessor:
     bgr_to_rgb: true
-    mean:
-    - 123.675
-    - 116.28
-    - 103.53
+    mean: [123.675, 116.28, 103.53]
     pad_val: 0
     seg_pad_val: 255
-    std:
-    - 58.395
-    - 57.12
-    - 57.375
+    std: [58.395, 57.12, 57.375]
     type: SegDataPreProcessor
   decode_head:
     align_corners: false
     channels: 512
     dropout_ratio: 0.1
-    in_channels:
-    - 768
-    - 768
-    - 768
-    - 768
-    in_index:
-    - 0
-    - 1
-    - 2
-    - 3
+    in_channels: [768, 768, 768, 768]
+    in_index: [0, 1, 2, 3]
     loss_decode:
       loss_weight: 1.0
       type: CrossEntropyLoss
@@ -99,24 +75,13 @@ model:
     num_classes: 19
     pool_scales:
       _args_:
-      - - 1
-        - 2
-        - 3
-        - 6
+      - [1, 2, 3, 6]
       _target_: builtins.tuple
     type: UPerHead
   neck:
-    in_channels:
-    - 768
-    - 768
-    - 768
-    - 768
+    in_channels: [768, 768, 768, 768]
     out_channels: 768
-    scales:
-    - 4
-    - 2
-    - 1
-    - 0.5
+    scales: [4, 2, 1, 0.5]
     type: MultiLevelNeck
   pretrained: pretrain/jx_vit_base_p16_224-80ecf9dd.pth
   test_cfg:

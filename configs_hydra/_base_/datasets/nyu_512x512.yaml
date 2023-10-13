@@ -13,8 +13,7 @@ test_dataloader:
     - keep_ratio: true
       scale: &id001
         _args_:
-        - - 2048
-          - 512
+        - [2048, 512]
         _target_: builtins.tuple
       type: Resize
     - depth_rescale_factor: 0.001
@@ -71,19 +70,16 @@ train_dataloader:
     - keep_ratio: true
       ratio_range: &id003
         _args_:
-        - - 0.8
-          - 1.5
+        - [0.8, 1.5]
         _target_: builtins.tuple
       scale: &id004
         _args_:
-        - - 768
-          - 512
+        - [768, 512]
         _target_: builtins.tuple
       type: RandomResize
     - crop_size: &id005
         _args_:
-        - - 512
-          - 512
+        - [512, 512]
         _target_: builtins.tuple
       type: RandomCrop
     - transforms:

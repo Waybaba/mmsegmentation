@@ -1,15 +1,13 @@
 # @package _global_
 crop_size: &id002
   _args_:
-  - - 480
-    - 480
+  - [480, 480]
   _target_: builtins.tuple
 data_root: data/VOCdevkit/VOC2010/
 dataset_type: PascalContextDataset
 img_scale: &id001
   _args_:
-  - - 520
-    - 520
+  - [520, 520]
   _target_: builtins.tuple
 test_dataloader:
   batch_size: 1
@@ -57,8 +55,7 @@ train_dataloader:
     - keep_ratio: true
       ratio_range: &id003
         _args_:
-        - - 0.5
-          - 2.0
+        - [0.5, 2.0]
         _target_: builtins.tuple
       scale: *id001
       type: RandomResize

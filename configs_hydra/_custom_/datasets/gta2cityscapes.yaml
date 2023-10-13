@@ -41,12 +41,12 @@ test_evaluator:
   - mIoU
   type: IoUMetric
 test_pipeline:
-- type: LoadImageFromFile
-- keep_ratio: true
-  scale: *id001
-  type: Resize
-- type: LoadAnnotations
-- type: PackSegInputs
+  - type: LoadImageFromFile
+  - keep_ratio: true
+    scale: *id001
+    type: Resize
+  - type: LoadAnnotations
+  - type: PackSegInputs
 train_dataloader:
   batch_size: 2
   dataset:
@@ -83,19 +83,19 @@ train_dataloader:
     shuffle: true
     type: InfiniteSampler
 train_pipeline:
-- type: LoadImageFromFile
-- type: LoadAnnotations
-- keep_ratio: true
-  ratio_range: *id003
-  scale: *id004
-  type: RandomResize
-- cat_max_ratio: 0.75
-  crop_size: *id002
-  type: RandomCrop
-- prob: 0.5
-  type: RandomFlip
-- type: PhotoMetricDistortion
-- type: PackSegInputs
+  - type: LoadImageFromFile
+  - type: LoadAnnotations
+  - keep_ratio: true
+    ratio_range: *id003
+    scale: *id004
+    type: RandomResize
+  - cat_max_ratio: 0.75
+    crop_size: *id002
+    type: RandomCrop
+  - prob: 0.5
+    type: RandomFlip
+  - type: PhotoMetricDistortion
+  - type: PackSegInputs
 tta_pipeline:
 - backend_args: null
   type: LoadImageFromFile

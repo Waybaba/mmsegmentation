@@ -1,16 +1,10 @@
 # @package _global_
 data_preprocessor:
   bgr_to_rgb: true
-  mean:
-  - 123.675
-  - 116.28
-  - 103.53
+  mean: [123.675, 116.28, 103.53]
   pad_val: 0
   seg_pad_val: 255
-  std:
-  - 58.395
-  - 57.12
-  - 57.375
+  std: [58.395, 57.12, 57.375]
   type: SegDataPreProcessor
 model:
   auxiliary_head:
@@ -50,21 +44,16 @@ model:
     align_corners: false
     downsample_dw_channels:
       _args_:
-      - - 32
-        - 48
+      - [32, 48]
       _target_: builtins.tuple
     fusion_out_channels: 128
     global_block_channels:
       _args_:
-      - - 64
-        - 96
-        - 128
+      - [64, 96, 128]
       _target_: builtins.tuple
     global_block_strides:
       _args_:
-      - - 2
-        - 2
-        - 1
+      - [2, 2, 1]
       _target_: builtins.tuple
     global_in_channels: 64
     global_out_channels: 128
@@ -76,23 +65,15 @@ model:
       type: SyncBN
     out_indices:
       _args_:
-      - - 0
-        - 1
-        - 2
+      - [0, 1, 2]
       _target_: builtins.tuple
     type: FastSCNN
   data_preprocessor:
     bgr_to_rgb: true
-    mean:
-    - 123.675
-    - 116.28
-    - 103.53
+    mean: [123.675, 116.28, 103.53]
     pad_val: 0
     seg_pad_val: 255
-    std:
-    - 58.395
-    - 57.12
-    - 57.375
+    std: [58.395, 57.12, 57.375]
     type: SegDataPreProcessor
   decode_head:
     align_corners: false

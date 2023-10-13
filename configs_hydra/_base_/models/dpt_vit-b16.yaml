@@ -1,16 +1,10 @@
 # @package _global_
 data_preprocessor:
   bgr_to_rgb: true
-  mean:
-  - 123.675
-  - 116.28
-  - 103.53
+  mean: [123.675, 116.28, 103.53]
   pad_val: 0
   seg_pad_val: 255
-  std:
-  - 58.395
-  - 57.12
-  - 57.375
+  std: [58.395, 57.12, 57.375]
   type: SegDataPreProcessor
 model:
   auxiliary_head: null
@@ -22,43 +16,28 @@ model:
     num_layers: 12
     out_indices:
       _args_:
-      - - 2
-        - 5
-        - 8
-        - 11
+      - [2, 5, 8, 11]
       _target_: builtins.tuple
     output_cls_token: true
     type: VisionTransformer
     with_cls_token: true
   data_preprocessor:
     bgr_to_rgb: true
-    mean:
-    - 123.675
-    - 116.28
-    - 103.53
+    mean: [123.675, 116.28, 103.53]
     pad_val: 0
     seg_pad_val: 255
-    std:
-    - 58.395
-    - 57.12
-    - 57.375
+    std: [58.395, 57.12, 57.375]
     type: SegDataPreProcessor
   decode_head:
     channels: 256
     embed_dims: 768
     in_channels:
       _args_:
-      - - 768
-        - 768
-        - 768
-        - 768
+      - [768, 768, 768, 768]
       _target_: builtins.tuple
     in_index:
       _args_:
-      - - 0
-        - 1
-        - 2
-        - 3
+      - [0, 1, 2, 3]
       _target_: builtins.tuple
     input_transform: multiple_select
     loss_decode:
@@ -69,11 +48,7 @@ model:
       requires_grad: true
       type: SyncBN
     num_classes: 150
-    post_process_channels:
-    - 96
-    - 192
-    - 384
-    - 768
+    post_process_channels: [96, 192, 384, 768]
     readout_type: project
     type: DPTHead
   pretrained: pretrain/vit-b16_p16_224-80ecf9dd.pth

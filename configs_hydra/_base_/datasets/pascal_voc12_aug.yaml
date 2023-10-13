@@ -1,8 +1,7 @@
 # @package _global_
 crop_size: &id001
   _args_:
-  - - 512
-    - 512
+  - [512, 512]
   _target_: builtins.tuple
 data_root: data/VOCdevkit/VOC2012
 dataset_aug:
@@ -17,13 +16,11 @@ dataset_aug:
   - keep_ratio: true
     ratio_range: &id002
       _args_:
-      - - 0.5
-        - 2.0
+      - [0.5, 2.0]
       _target_: builtins.tuple
     scale: &id003
       _args_:
-      - - 2048
-        - 512
+      - [2048, 512]
       _target_: builtins.tuple
     type: RandomResize
   - cat_max_ratio: 0.75
@@ -60,13 +57,7 @@ dataset_train:
   - type: PackSegInputs
   type: PascalVOCDataset
 dataset_type: PascalVOCDataset
-img_ratios:
-- 0.5
-- 0.75
-- 1.0
-- 1.25
-- 1.5
-- 1.75
+img_ratios: [0.5, 0.75, 1.0, 1.25, 1.5, 1.75]
 test_dataloader:
   batch_size: 1
   dataset:

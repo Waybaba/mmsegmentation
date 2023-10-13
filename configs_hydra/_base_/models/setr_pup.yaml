@@ -5,16 +5,10 @@ backbone_norm_cfg:
   type: LN
 data_preprocessor:
   bgr_to_rgb: true
-  mean:
-  - 123.675
-  - 116.28
-  - 103.53
+  mean: [123.675, 116.28, 103.53]
   pad_val: 0
   seg_pad_val: 255
-  std:
-  - 58.395
-  - 57.12
-  - 57.375
+  std: [58.395, 57.12, 57.375]
   type: SegDataPreProcessor
 model:
   auxiliary_head:
@@ -74,8 +68,7 @@ model:
     embed_dims: 1024
     img_size:
       _args_:
-      - - 768
-        - 768
+      - [768, 768]
       _target_: builtins.tuple
     in_channels: 3
     interpolate_mode: bilinear
@@ -87,26 +80,17 @@ model:
     num_layers: 24
     out_indices:
       _args_:
-      - - 9
-        - 14
-        - 19
-        - 23
+      - [9, 14, 19, 23]
       _target_: builtins.tuple
     patch_size: 16
     type: VisionTransformer
     with_cls_token: true
   data_preprocessor:
     bgr_to_rgb: true
-    mean:
-    - 123.675
-    - 116.28
-    - 103.53
+    mean: [123.675, 116.28, 103.53]
     pad_val: 0
     seg_pad_val: 255
-    std:
-    - 58.395
-    - 57.12
-    - 57.375
+    std: [58.395, 57.12, 57.375]
     type: SegDataPreProcessor
   decode_head:
     align_corners: false

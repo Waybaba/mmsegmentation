@@ -6,16 +6,10 @@ backbone_norm_cfg:
 checkpoint: https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/segmenter/vit_base_p16_384_20220308-96dfe169.pth
 data_preprocessor:
   bgr_to_rgb: true
-  mean:
-  - 127.5
-  - 127.5
-  - 127.5
+  mean: [127.5, 127.5, 127.5]
   pad_val: 0
   seg_pad_val: 255
-  std:
-  - 127.5
-  - 127.5
-  - 127.5
+  std: [127.5, 127.5, 127.5]
   type: SegDataPreProcessor
 model:
   backbone:
@@ -26,8 +20,7 @@ model:
     final_norm: true
     img_size: &id001
       _args_:
-      - - 512
-        - 512
+      - [512, 512]
       _target_: builtins.tuple
     in_channels: 3
     interpolate_mode: bicubic
@@ -42,16 +35,10 @@ model:
     with_cls_token: true
   data_preprocessor:
     bgr_to_rgb: true
-    mean:
-    - 127.5
-    - 127.5
-    - 127.5
+    mean: [127.5, 127.5, 127.5]
     pad_val: 0
     seg_pad_val: 255
-    std:
-    - 127.5
-    - 127.5
-    - 127.5
+    std: [127.5, 127.5, 127.5]
     type: SegDataPreProcessor
   decode_head:
     channels: 768
@@ -72,7 +59,6 @@ model:
     mode: slide
     stride:
       _args_:
-      - - 480
-        - 480
+      - [480, 480]
       _target_: builtins.tuple
   type: EncoderDecoder

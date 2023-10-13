@@ -1,16 +1,10 @@
 # @package _global_
 data_preprocessor:
   bgr_to_rgb: true
-  mean:
-  - 123.675
-  - 116.28
-  - 103.53
+  mean: [123.675, 116.28, 103.53]
   pad_val: 0
   seg_pad_val: 255
-  std:
-  - 58.395
-  - 57.12
-  - 57.375
+  std: [58.395, 57.12, 57.375]
   type: SegDataPreProcessor
 model:
   auxiliary_head:
@@ -79,40 +73,25 @@ model:
     bga_channels: 128
     detail_channels:
       _args_:
-      - - 64
-        - 64
-        - 128
+      - [64, 64, 128]
       _target_: builtins.tuple
     init_cfg: null
     out_indices:
       _args_:
-      - - 0
-        - 1
-        - 2
-        - 3
-        - 4
+      - [0, 1, 2, 3, 4]
       _target_: builtins.tuple
     semantic_channels:
       _args_:
-      - - 16
-        - 32
-        - 64
-        - 128
+      - [16, 32, 64, 128]
       _target_: builtins.tuple
     semantic_expansion_ratio: 6
     type: BiSeNetV2
   data_preprocessor:
     bgr_to_rgb: true
-    mean:
-    - 123.675
-    - 116.28
-    - 103.53
+    mean: [123.675, 116.28, 103.53]
     pad_val: 0
     seg_pad_val: 255
-    std:
-    - 58.395
-    - 57.12
-    - 57.375
+    std: [58.395, 57.12, 57.375]
     type: SegDataPreProcessor
   decode_head:
     align_corners: false

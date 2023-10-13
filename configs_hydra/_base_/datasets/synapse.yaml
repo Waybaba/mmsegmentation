@@ -3,8 +3,7 @@ data_root: data/synapse/
 dataset_type: SynapseDataset
 img_scale: &id001
   _args_:
-  - - 224
-    - 224
+  - [224, 224]
   _target_: builtins.tuple
 test_dataloader:
   batch_size: 1

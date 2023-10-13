@@ -1,0 +1,45 @@
+# @package _global_
+defaults:
+- ./segformer_mit-b0.yaml
+norm_cfg:
+  requires_grad: true
+  type: SyncBN
+model:
+  decode_head:
+    align_corners: false
+    channels: 256
+    decoder_params:
+      embed_cfg:
+        act_cfg: null
+        norm_cfg: null
+        type: mlp
+      embed_dims: 256
+      embed_neck_cfg:
+        act_cfg: null
+        norm_cfg: null
+        type: mlp
+      fusion_cfg:
+        act_cfg:
+          type: ReLU
+        kernel_size: 1
+        norm_cfg:
+          requires_grad: true
+          type: SyncBN
+        type: conv
+    dropout_ratio: 0.1
+    in_channels: [32, 64, 160, 256]
+    in_index: [0, 1, 2, 3]
+    loss_decode:
+      loss_weight: 1.0
+      type: CrossEntropyLoss
+      use_sigmoid: false
+    norm_cfg:
+      requires_grad: true
+      type: SyncBN
+    num_classes: 19
+    type: DAFormerHead
+  pretrained: null
+  test_cfg:
+    mode: whole
+  train_cfg: {}
+  type: EncoderDecoder

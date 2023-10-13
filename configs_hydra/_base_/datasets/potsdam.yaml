@@ -1,18 +1,11 @@
 # @package _global_
 crop_size: &id001
   _args_:
-  - - 512
-    - 512
+  - [512, 512]
   _target_: builtins.tuple
 data_root: data/potsdam
 dataset_type: PotsdamDataset
-img_ratios:
-- 0.5
-- 0.75
-- 1.0
-- 1.25
-- 1.5
-- 1.75
+img_ratios: [0.5, 0.75, 1.0, 1.25, 1.5, 1.75]
 test_dataloader:
   batch_size: 1
   dataset:
@@ -60,8 +53,7 @@ train_dataloader:
     - keep_ratio: true
       ratio_range: &id002
         _args_:
-        - - 0.5
-          - 2.0
+        - [0.5, 2.0]
         _target_: builtins.tuple
       scale: *id001
       type: RandomResize

@@ -1,69 +1,48 @@
 # @package _global_
 data_preprocessor:
   bgr_to_rgb: true
-  mean:
-  - 123.675
-  - 116.28
-  - 103.53
+  mean: [123.675, 116.28, 103.53]
   pad_val: 0
   seg_pad_val: 255
-  std:
-  - 58.395
-  - 57.12
-  - 57.375
+  std: [58.395, 57.12, 57.375]
   type: SegDataPreProcessor
 model:
   backbone:
     dec_non_bottleneck_channels: &id001
       _args_:
-      - - 64
-        - 16
+      - [64, 16]
       _target_: builtins.tuple
     dec_stages_non_bottleneck:
       _args_:
-      - - 2
-        - 2
+      - [2, 2]
       _target_: builtins.tuple
     dec_upsample_channels: *id001
     dropout_ratio: 0.1
     enc_downsample_channels:
       _args_:
-      - - 16
-        - 64
-        - 128
+      - [16, 64, 128]
       _target_: builtins.tuple
     enc_non_bottleneck_channels:
       _args_:
-      - - 64
-        - 128
+      - [64, 128]
       _target_: builtins.tuple
     enc_non_bottleneck_dilations:
       _args_:
-      - - 2
-        - 4
-        - 8
-        - 16
+      - [2, 4, 8, 16]
       _target_: builtins.tuple
     enc_stage_non_bottlenecks:
       _args_:
-      - - 5
-        - 8
+      - [5, 8]
       _target_: builtins.tuple
     in_channels: 3
     init_cfg: null
     type: ERFNet
   data_preprocessor:
     bgr_to_rgb: true
-    mean:
-    - 123.675
-    - 116.28
-    - 103.53
+    mean: [123.675, 116.28, 103.53]
     pad_val: 0
     seg_pad_val: 255
-    std:
-    - 58.395
-    - 57.12
-    - 57.375
+    std: [58.395, 57.12, 57.375]
     type: SegDataPreProcessor
   decode_head:
     align_corners: false

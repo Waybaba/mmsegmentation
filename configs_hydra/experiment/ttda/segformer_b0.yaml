@@ -1,9 +1,10 @@
 # @package _global_
 defaults:
 - /_base_/models: segformer_mit-b0.yaml
-- /_base_/datasets: cityscapes_1024x1024.yaml
+- /_custom_/datasets: gta2cityscapes.yaml
 - /_base_/default_runtime.yaml
-- /_base_/schedules: schedule_160k.yaml
+- /_base_/schedules_nooptim: schedule_160k.yaml
+
 crop_size: &id001
   _args_:
   - [1024, 1024]
@@ -26,7 +27,7 @@ model:
       - [768, 768]
       _target_: builtins.tuple
 optim_wrapper:
-  _delete_: true
+  # _delete_: true
   optimizer:
     betas:
       _args_:

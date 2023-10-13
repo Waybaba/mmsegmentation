@@ -1,16 +1,10 @@
 # @package _global_
 data_preprocessor:
   bgr_to_rgb: true
-  mean:
-  - 127.5
-  - 127.5
-  - 127.5
+  mean: [127.5, 127.5, 127.5]
   pad_val: 0
   seg_pad_val: 0
-  std:
-  - 127.5
-  - 127.5
-  - 127.5
+  std: [127.5, 127.5, 127.5]
   type: SegDataPreProcessor
 find_unused_parameters: true
 model:
@@ -30,11 +24,7 @@ model:
             ddconfig:
               attn_resolutions: []
               ch: 128
-              ch_mult:
-              - 1
-              - 2
-              - 4
-              - 4
+              ch_mult: [1, 2, 4, 4]
               double_z: true
               dropout: 0.0
               in_channels: 3
@@ -57,29 +47,17 @@ model:
         scale_factor: 0.18215
         scheduler_config:
           params:
-            cycle_lengths:
-            - 10000000000000
-            f_max:
-            - 1.0
-            f_min:
-            - 1.0
-            f_start:
-            - 1.0e-06
-            warm_up_steps:
-            - 10000
+            cycle_lengths: [10000000000000]
+            f_max: [1.0]
+            f_min: [1.0]
+            f_start: [1.0e-06]
+            warm_up_steps: [10000]
           target: ldm.lr_scheduler.LambdaLinearScheduler
         timesteps: 1000
         unet_config:
           params:
-            attention_resolutions:
-            - 4
-            - 2
-            - 1
-            channel_mult:
-            - 1
-            - 2
-            - 4
-            - 4
+            attention_resolutions: [4, 2, 1]
+            channel_mult: [1, 2, 4, 4]
             context_dim: 768
             image_size: 32
             in_channels: 4
@@ -97,16 +75,10 @@ model:
     type: VPD
   data_preprocessor:
     bgr_to_rgb: true
-    mean:
-    - 127.5
-    - 127.5
-    - 127.5
+    mean: [127.5, 127.5, 127.5]
     pad_val: 0
     seg_pad_val: 0
-    std:
-    - 127.5
-    - 127.5
-    - 127.5
+    std: [127.5, 127.5, 127.5]
     type: SegDataPreProcessor
   type: DepthEstimator
 stable_diffusion_cfg:
@@ -124,11 +96,7 @@ stable_diffusion_cfg:
         ddconfig:
           attn_resolutions: []
           ch: 128
-          ch_mult:
-          - 1
-          - 2
-          - 4
-          - 4
+          ch_mult: [1, 2, 4, 4]
           double_z: true
           dropout: 0.0
           in_channels: 3
@@ -151,29 +119,17 @@ stable_diffusion_cfg:
     scale_factor: 0.18215
     scheduler_config:
       params:
-        cycle_lengths:
-        - 10000000000000
-        f_max:
-        - 1.0
-        f_min:
-        - 1.0
-        f_start:
-        - 1.0e-06
-        warm_up_steps:
-        - 10000
+        cycle_lengths: [10000000000000]
+        f_max: [1.0]
+        f_min: [1.0]
+        f_start: [1.0e-06]
+        warm_up_steps: [10000]
       target: ldm.lr_scheduler.LambdaLinearScheduler
     timesteps: 1000
     unet_config:
       params:
-        attention_resolutions:
-        - 4
-        - 2
-        - 1
-        channel_mult:
-        - 1
-        - 2
-        - 4
-        - 4
+        attention_resolutions: [4, 2, 1]
+        channel_mult: [1, 2, 4, 4]
         context_dim: 768
         image_size: 32
         in_channels: 4
