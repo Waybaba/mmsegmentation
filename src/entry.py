@@ -11,39 +11,34 @@ from omegaconf.listconfig import ListConfig
 
 def parse_tuple(cfg):
     """
-    Recursively instantiate the config.
-    ! we mannually do this since hydra can not parse tuple recursively
-    e.g.
-    ngram_range:
-    _target_: builtins.tuple
-    _args_:
-      - [2, 3]
+    Recursively instantiate the config to support tuple parsing.
+
+    Hydra by default cannot recursively parse tuples, and would also convert
+    tuples into lists. This function creates a new dictionary or list to
+    prevent modifications on the original config and to retain tuple format.
+
+    Example:
+        ngram_range:
+        _target_: builtins.tuple
+        _args_:
+          - [2, 3]
+    Return:
+        A pure dict
+    
+    Reference:
     https://github.com/facebookresearch/hydra/issues/1432#issuecomment-786943368
     """
+    # For dictionaries or DictConfig
     if isinstance(cfg, (DictConfig, dict)):
-        if "_target_" in cfg:
-            cfg = hydra.utils.instantiate(cfg, _recursive_=False)
-            return cfg
-        for k, v in cfg.items():
-            # if k == "crop_size":  print(1)
-            cfg[k] = parse_tuple(v)
-    elif isinstance(cfg, (ListConfig, list)):
-        for i, v in enumerate(cfg):
-            cfg[i] = parse_tuple(v)
-    return cfg
+        # Instantiate if "_target_" key is present, else recurse
+        return hydra.utils.instantiate(cfg, _recursive_=False) if "_target_" in cfg else {k: parse_tuple(v) for k, v in cfg.items()}
 
-def replace_tuples_in_dict(dict1, dict2):
-    for key, value in dict1.items():
-        if isinstance(value, tuple):
-            dict2[key] = value
-        elif isinstance(value, dict):
-            replace_tuples_in_dict(value, dict2[key])
-        elif isinstance(value, list):
-            for idx, item in enumerate(value):
-                if isinstance(item, dict):
-                    replace_tuples_in_dict(item, dict2[key][idx])
-                elif isinstance(item, tuple):
-                    dict2[key][idx] = item
+    # For lists or ListConfig
+    elif isinstance(cfg, (ListConfig, list)):
+        return [parse_tuple(v) for v in cfg]
+
+    # Return original value for non-list or non-dict types
+    return cfg
 
 
 @hydra.main(version_base=None, config_path=str(root / "configs_hydra"), config_name="entry.yaml")	
@@ -52,17 +47,7 @@ def main(cfg):
 		# raise FileNotFoundError("Please create .env file in the root directory. See .env.example for reference.")
 
     # to pure dict recursively
-    cfg = OmegaConf.to_container(cfg)
-    cfg_with_parse_tuple = parse_tuple(cfg) # can keep tuple but can not parse path
-    cfg_with_parse_path = hydra.utils.instantiate(cfg) # can parse path but can not keep tuple
-    cfg_with_parse_path = OmegaConf.to_container(cfg_with_parse_path)
-    replace_tuples_in_dict(cfg_with_parse_tuple, cfg_with_parse_path)
-    cfg = cfg_with_parse_path
-
-
-    # from mmengine.config import Config, DictAction
-    # cfg_py = Config.fromfile("configs/segformer/segformer_mit-b0_8xb1-160k_cityscapes-1024x1024.py")
-
+    cfg = parse_tuple(cfg) # can keep tuple but can not parse path
 
     # build the runner from config
     if 'runner_type' not in cfg:

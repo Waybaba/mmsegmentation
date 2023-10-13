@@ -20,6 +20,8 @@ import yaml
 import copy
 from pathlib import Path
 import pyrootutils
+from collections import OrderedDict
+
 
 SRC_CONFIGS = 'configs'
 DST_CONFIGS = 'debug/configs_hydra'
@@ -37,9 +39,6 @@ def numeric_list_representer(dumper, data):
     if all(isinstance(item, (int, float)) for item in data):
         return dumper.represent_sequence(u'tag:yaml.org,2002:seq', data, flow_style=True)
     return dumper.represent_list(data)
-
-
-from collections import OrderedDict
 
 def order_dict(data):
     """Ensure 'defaults' is the first key in the dictionary if it exists."""

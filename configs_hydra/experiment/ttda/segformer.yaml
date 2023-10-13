@@ -1,0 +1,68 @@
+# @package _global_
+defaults:
+- /_base_/models: segformer_mit-b0.yaml
+- /_custom_/datasets: gta2cityscapes.yaml
+- /_base_/default_runtime.yaml
+- /_base_/schedules_nooptim: schedule_160k.yaml
+
+crop_size: &id001
+  _args_:
+  - ??? # e.g. [1024, 1024]
+  _target_: builtins.tuple
+data_preprocessor:
+  size: ${crop_size}
+# checkpoint: https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/segformer/mit_b0_20220624-7e0fe6dd.pth
+model:
+  backbone:
+    init_cfg:
+      checkpoint: ???
+      type: Pretrained
+  data_preprocessor:
+    size: ${crop_size} # *id001
+  test_cfg:
+    crop_size: ${crop_size} # *id001
+    mode: slide
+    stride:
+      _args_:
+      - ??? # 0.75 * crop_size e.g. [768, 768]
+      _target_: builtins.tuple
+optim_wrapper:
+  # _delete_: true
+  optimizer:
+    betas:
+      _args_:
+      - [0.9, 0.999]
+      _target_: builtins.tuple
+    lr: 6.0e-05
+    type: AdamW
+    weight_decay: 0.01
+  paramwise_cfg:
+    custom_keys:
+      head:
+        lr_mult: 10.0
+      norm:
+        decay_mult: 0.0
+      pos_block:
+        decay_mult: 0.0
+  type: OptimWrapper
+param_scheduler:
+- begin: 0
+  by_epoch: false
+  end: 1500
+  start_factor: 1.0e-06
+  type: LinearLR
+- begin: 1500
+  by_epoch: false
+  end: 160000
+  eta_min: 0.0
+  power: 1.0
+  type: PolyLR
+train_dataloader:
+  batch_size: 1
+  num_workers: 4
+val_dataloader:
+  batch_size: 1
+  num_workers: 4
+test_dataloader:
+  batch_size: 1
+  num_workers: 4

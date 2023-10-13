@@ -1,0 +1,14 @@
+# @package _global_
+defaults:
+  - ttda/segformer.yaml
+
+
+model:
+  backbone:
+    embed_dims: 64
+    init_cfg:
+      checkpoint: https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/segformer/mit_b5_20220624-658746d9.pth
+      type: Pretrained
+    num_layers: [3, 6, 40, 3]
+  decode_head:
+    in_channels: [64, 128, 320, 512]
