@@ -1,13 +1,12 @@
 # @package _global_
 defaults:
-- /_base_/models/pspnet_r50-d8.yaml
-- /_base_/datasets/coco-stuff10k.yaml
+- /_base_/models: pspnet_r50-d8.yaml
+- /_base_/datasets: coco-stuff10k.yaml
 - /_base_/default_runtime.yaml
-- /_base_/schedules/schedule_20k.yaml
+- /_base_/schedules: schedule_20k.yaml
 crop_size: &id001
   _args_:
-  - - 512
-    - 512
+  - [512, 512]
   _target_: builtins.tuple
 data_preprocessor:
   size: *id001

@@ -8,19 +8,7 @@ model:
     init_cfg:
       checkpoint: https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/segformer/mit_b1_20220624-02e5a6a1.pth
       type: Pretrained
-    num_heads:
-    - 1
-    - 2
-    - 5
-    - 8
-    num_layers:
-    - 2
-    - 2
-    - 2
-    - 2
+    num_heads: [1, 2, 5, 8]
+    num_layers: [2, 2, 2, 2]
   decode_head:
-    in_channels:
-    - 64
-    - 128
-    - 320
-    - 512
+    in_channels: [64, 128, 320, 512]

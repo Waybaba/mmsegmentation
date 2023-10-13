@@ -1,13 +1,12 @@
 # @package _global_
 defaults:
-- /_base_/models/pspnet_r50-d8.yaml
-- /_base_/datasets/cityscapes.yaml
+- /_base_/models: pspnet_r50-d8.yaml
+- /_base_/datasets: cityscapes.yaml
 - /_base_/default_runtime.yaml
-- /_base_/schedules/schedule_80k.yaml
+- /_base_/schedules: schedule_80k.yaml
 crop_size: &id001
   _args_:
-  - - 512
-    - 1024
+  - [512, 1024]
   _target_: builtins.tuple
 data_preprocessor:
   size: *id001
@@ -19,8 +18,7 @@ test_pipeline:
 - keep_ratio: true
   scale: &id002
     _args_:
-    - - 1920
-      - 1080
+    - [1920, 1080]
     _target_: builtins.tuple
   type: Resize
 - type: LoadAnnotations

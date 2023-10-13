@@ -4,8 +4,7 @@ defaults:
 checkpoint: https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/segformer/mit_b5_20220624-658746d9.pth
 crop_size: &id001
   _args_:
-  - - 640
-    - 640
+  - [640, 640]
   _target_: builtins.tuple
 data_preprocessor:
   size: *id001
@@ -16,13 +15,11 @@ train_pipeline:
 - keep_ratio: true
   ratio_range: &id003
     _args_:
-    - - 0.5
-      - 2.0
+    - [0.5, 2.0]
     _target_: builtins.tuple
   scale: &id002
     _args_:
-    - - 2048
-      - 640
+    - [2048, 640]
     _target_: builtins.tuple
   type: RandomResize
 - cat_max_ratio: 0.75
@@ -85,21 +82,9 @@ model:
     init_cfg:
       checkpoint: https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/segformer/mit_b5_20220624-658746d9.pth
       type: Pretrained
-    num_heads:
-    - 1
-    - 2
-    - 5
-    - 8
-    num_layers:
-    - 3
-    - 6
-    - 40
-    - 3
+    num_heads: [1, 2, 5, 8]
+    num_layers: [3, 6, 40, 3]
   data_preprocessor:
     size: *id001
   decode_head:
-    in_channels:
-    - 64
-    - 128
-    - 320
-    - 512
+    in_channels: [64, 128, 320, 512]

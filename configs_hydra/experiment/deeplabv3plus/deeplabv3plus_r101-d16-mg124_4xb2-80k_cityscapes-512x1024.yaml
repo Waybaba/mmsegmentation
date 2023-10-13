@@ -6,31 +6,20 @@ model:
     depth: 101
     dilations:
       _args_:
-      - - 1
-        - 1
-        - 1
-        - 2
+      - [1, 1, 1, 2]
       _target_: builtins.tuple
     multi_grid:
       _args_:
-      - - 1
-        - 2
-        - 4
+      - [1, 2, 4]
       _target_: builtins.tuple
     strides:
       _args_:
-      - - 1
-        - 2
-        - 2
-        - 1
+      - [1, 2, 2, 1]
       _target_: builtins.tuple
   decode_head:
     dilations:
       _args_:
-      - - 1
-        - 6
-        - 12
-        - 18
+      - [1, 6, 12, 18]
       _target_: builtins.tuple
     sampler:
       min_kept: 100000

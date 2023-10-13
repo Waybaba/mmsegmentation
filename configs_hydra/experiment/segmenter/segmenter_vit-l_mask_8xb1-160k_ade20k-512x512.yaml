@@ -1,13 +1,12 @@
 # @package _global_
 defaults:
-- /_base_/models/segmenter_vit-b16_mask.yaml
-- /_base_/datasets/ade20k_640x640.yaml
+- /_base_/models: segmenter_vit-b16_mask.yaml
+- /_base_/datasets: ade20k_640x640.yaml
 - /_base_/default_runtime.yaml
-- /_base_/schedules/schedule_160k.yaml
+- /_base_/schedules: schedule_160k.yaml
 crop_size: &id001
   _args_:
-  - - 640
-    - 640
+  - [640, 640]
   _target_: builtins.tuple
 data_preprocessor:
   size: *id001
@@ -33,8 +32,7 @@ model:
     mode: slide
     stride:
       _args_:
-      - - 608
-        - 608
+      - [608, 608]
       _target_: builtins.tuple
 optimizer:
   lr: 0.001

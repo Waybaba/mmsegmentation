@@ -1,13 +1,12 @@
 # @package _global_
 defaults:
-- /_base_/models/pspnet_r50-d8.yaml
-- /_base_/datasets/pascal_context.yaml
+- /_base_/models: pspnet_r50-d8.yaml
+- /_base_/datasets: pascal_context.yaml
 - /_base_/default_runtime.yaml
-- /_base_/schedules/schedule_40k.yaml
+- /_base_/schedules: schedule_40k.yaml
 crop_size: &id001
   _args_:
-  - - 480
-    - 480
+  - [480, 480]
   _target_: builtins.tuple
 data_preprocessor:
   size: *id001
@@ -23,8 +22,7 @@ model:
     mode: slide
     stride:
       _args_:
-      - - 320
-        - 320
+      - [320, 320]
       _target_: builtins.tuple
 optimizer:
   lr: 0.004

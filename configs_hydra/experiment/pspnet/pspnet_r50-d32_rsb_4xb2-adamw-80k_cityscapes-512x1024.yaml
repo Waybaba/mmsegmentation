@@ -1,13 +1,12 @@
 # @package _global_
 defaults:
-- /_base_/models/pspnet_r50-d8.yaml
-- /_base_/datasets/cityscapes.yaml
+- /_base_/models: pspnet_r50-d8.yaml
+- /_base_/datasets: cityscapes.yaml
 - /_base_/default_runtime.yaml
-- /_base_/schedules/schedule_80k.yaml
+- /_base_/schedules: schedule_80k.yaml
 crop_size: &id001
   _args_:
-  - - 512
-    - 1024
+  - [512, 1024]
   _target_: builtins.tuple
 data_preprocessor:
   size: *id001
@@ -16,10 +15,7 @@ model:
   backbone:
     dilations:
       _args_:
-      - - 1
-        - 1
-        - 2
-        - 4
+      - [1, 1, 2, 4]
       _target_: builtins.tuple
     init_cfg:
       checkpoint: https://download.openmmlab.com/mmclassification/v0/resnet/resnet50_8xb256-rsb-a1-600e_in1k_20211228-20e21305.pth
@@ -27,10 +23,7 @@ model:
       type: Pretrained
     strides:
       _args_:
-      - - 1
-        - 2
-        - 2
-        - 2
+      - [1, 2, 2, 2]
       _target_: builtins.tuple
     type: ResNet
   data_preprocessor:
@@ -55,7 +48,5 @@ param_scheduler:
 - begin: 1000
   by_epoch: false
   end: 80000
-  milestones:
-  - 60000
-  - 72000
+  milestones: [60000, 72000]
   type: MultiStepLR

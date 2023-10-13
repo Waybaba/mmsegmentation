@@ -1,12 +1,11 @@
 # @package _global_
 defaults:
-- /_base_/models/deeplabv3plus_r50-d8.yaml
-- /_base_/datasets/mapillary_v1_65.yaml
+- /_base_/models: deeplabv3plus_r50-d8.yaml
+- /_base_/datasets: mapillary_v1_65.yaml
 - /_base_/default_runtime.yaml
 crop_size: &id001
   _args_:
-  - - 1280
-    - 1280
+  - [1280, 1280]
   _target_: builtins.tuple
 data_preprocessor:
   size: *id001
@@ -24,8 +23,7 @@ iters: 300000
 optimizer:
   betas: &id002
     _args_:
-    - - 0.9
-      - 0.999
+    - [0.9, 0.999]
     _target_: builtins.tuple
   lr: 0.0001
   type: AdamW
