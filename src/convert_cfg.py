@@ -1,44 +1,94 @@
 import os
 import yaml
+import copy
+from pathlib import Path
 import pyrootutils
-root = pyrootutils.setup_root(__file__, dotenv=True, pythonpath=True, indicator=["configs"])
 
+SRC_CONFIGS = 'configs'
+DST_CONFIGS = 'debug/configs_hydra'
+
+def convert_global_vars_to_dict(global_vars):
+	"""Convert global variables from exec to a filtered dictionary."""
+	return {k: copy.deepcopy(v) for k, v in global_vars.items() if not k.startswith("__")}
+
+from collections import OrderedDict
+
+def order_dict(data):
+    """Ensure 'defaults' is the first key in the dictionary if it exists."""
+    if "defaults" not in data:
+        return data
+
+    ordered_data = OrderedDict()
+    ordered_data['defaults'] = data.pop('defaults')
+    for key, value in data.items():
+        ordered_data[key] = value
+    return ordered_data
+
+def dereference_data(data):
+	"""Recursively create deep copies of shared references."""
+	if isinstance(data, list):
+		return [dereference_data(item) for item in data]
+	if isinstance(data, dict):
+		return {k: dereference_data(v) for k, v in data.items()}
+	return copy.deepcopy(data)
+
+def tuple_representer(dumper, data):
+	"""Represent tuple in a custom way for YAML."""
+	return dumper.represent_dict({'_target_': 'builtins.tuple', '_args_': [list(data)]})
 
 def convert_py_to_yaml(py_file_path):
-    """
-    return content of yaml file
-    """
-    return "template"
+	"""Convert a Python configuration file to a YAML format."""
+	with open(py_file_path, 'r') as f:
+		content = f.read()
+
+	global_vars = {}
+	try:
+		exec(content, global_vars)
+	except Exception as e:
+		raise ValueError(f"Error executing the Python file: {e}")
+
+	global_vars = convert_global_vars_to_dict(global_vars)
+
+	yaml_data = {key: value for key, value in global_vars.items() if key != "_base_"}
+
+	if "_base_" in global_vars:
+		base_values = global_vars["_base_"]
+		yaml_data["defaults"] = [item.replace('.py', '.yaml').replace('../', '/') for item in (base_values if isinstance(base_values, list) else [base_values])]
+
+	yaml_data = dereference_data(yaml_data)
+	yaml.add_representer(tuple, tuple_representer)
+	def ordered_dict_representer(dumper, data):
+		return dumper.represent_dict(data.items())
+
+	yaml.add_representer(OrderedDict, ordered_dict_representer)
+	return yaml.dump(order_dict(yaml_data), default_flow_style=False)
 
 def main():
-    src_directory = root / 'configs'
-    dst_directory = root / 'hydra_configs'
+	root = pyrootutils.setup_root(__file__, dotenv=True, pythonpath=True, indicator=["configs"])
+	src_directory = root / SRC_CONFIGS
+	dst_directory = root / DST_CONFIGS
+	final_directory = root / "configs_hydra"
+	dst_directory.mkdir(parents=True, exist_ok=True)
+	final_directory.mkdir(parents=True, exist_ok=True)
 
-    # 如果目标目录不存在，则创建
-    if not os.path.exists(dst_directory):
-        os.makedirs(dst_directory)
 
-    # 遍历源目录
-    for root, dirs, files in os.walk(src_directory):
-        # 对于每一个目录，创建相应的目标目录
-        for dir_name in dirs:
-            src_subdir = os.path.join(root, dir_name)
-            dst_subdir = src_subdir.replace(src_directory, dst_directory)
-            
-            if not os.path.exists(dst_subdir):
-                os.makedirs(dst_subdir)
+	for root_, dirs, files in os.walk(src_directory):
+		dst_subdir = Path(root_.replace(str(src_directory), str(dst_directory)))
+		dst_subdir.mkdir(parents=True, exist_ok=True)
 
-        # 对于每一个.py文件，转换为.yaml文件并保存到目标目录
-        for filename in files:
-            if filename.endswith(".py"):
-                src_file = os.path.join(root, filename)
-                yaml_data = convert_py_to_yaml(src_file)
-                
-                yaml_filename = os.path.splitext(filename)[0] + '.yaml'
-                dst_file = os.path.join(root.replace(src_directory, dst_directory), yaml_filename)
-                
-                with open(dst_file, 'w') as f:
-                    yaml.dump(yaml_data, f, default_flow_style=False)
+		for filename in files:
+			src_file = Path(root_) / filename
+
+			if filename.endswith(".py"):
+				yaml_data = convert_py_to_yaml(src_file)
+				with (dst_subdir / (src_file.stem + '.yaml')).open('w') as f:
+					f.write("# @package _global_\n")
+					f.write(yaml_data)
+			else:
+				with open(src_file, 'r') as src_f, (dst_subdir / filename).open('w') as dst_f:
+					dst_f.write(src_f.read())
+			
+			print(f"Converted {dst_subdir / filename}")
 
 if __name__ == "__main__":
-    main()
+	main()

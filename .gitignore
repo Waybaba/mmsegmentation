@@ -120,3 +120,4 @@ mmseg/.mim
 *.pth
 /debug/
 configs/amlt/latest.yaml
+/outputs
