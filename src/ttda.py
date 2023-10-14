@@ -129,8 +129,6 @@ class TTDAHook(Hook):
             losses = model._run_forward(data_batch, mode='loss')  # type: ignore
         parsed_losses, log_vars = model.parse_losses(losses)  # type: ignore
         optim_wrapper.update_params(parsed_losses)
-        if self.every_n_train_iters(runner, self.interval):
-            runner.logger.info('loss become infinite or NaN!')
     
     def after_test_epoch(self, runner, metrics):
         # runner.logger.info('after test epoch')
