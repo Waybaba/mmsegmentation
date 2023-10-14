@@ -7,7 +7,7 @@ from mmseg.registry import RUNNERS
 from omegaconf import OmegaConf
 from omegaconf.dictconfig import DictConfig
 from omegaconf.listconfig import ListConfig
-
+from mmengine.config import Config, DictAction
 
 def parse_tuple(cfg):
     """
@@ -48,6 +48,9 @@ def main(cfg):
 
     # to pure dict recursively
     cfg = parse_tuple(cfg) # can keep tuple but can not parse path
+
+    # to mmcv cfg
+    cfg = Config(cfg)
 
     # build the runner from config
     if 'runner_type' not in cfg:
