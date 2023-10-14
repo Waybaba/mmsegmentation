@@ -1,0 +1,26 @@
+# @package _global_
+
+custom_hooks:
+  - type: TTDAHook
+    turn_on_adapt: true # for test source-only
+
+default_hooks:
+  visualization:
+    draw: ??? # true
+    interval: ??? # draw seg figure
+  logger:
+    interval: 10
+
+train_cfg:
+  val_interval: 100 # not used since this is TTDA
+
+load_from: ??? # ! load from mmseg model
+
+# model:
+#   test_cfg:
+#     mode: slide
+
+train: false
+test: true
+tags: [ttda_debug]
+task_name: MMSEG

@@ -8,6 +8,7 @@ from omegaconf import OmegaConf
 from omegaconf.dictconfig import DictConfig
 from omegaconf.listconfig import ListConfig
 from mmengine.config import Config, DictAction
+import src.ttda
 
 def parse_tuple(cfg):
     """
@@ -62,7 +63,11 @@ def main(cfg):
         runner = RUNNERS.build(cfg)
 
     # start training
-    runner.train()
+    if cfg.train: 
+        runner.train()
+    if cfg.test: 
+        metrics = runner.test()
+        
 
 if __name__ == "__main__":
     main()
