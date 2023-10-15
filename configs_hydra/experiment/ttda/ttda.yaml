@@ -3,6 +3,7 @@
 ttda_hook: 
   type: TTDAHook
   turn_on_adapt: true # for test source-only
+  adapt_img_vis_freq: ???
 
 custom_hooks:
   - ${ttda_hook} # ! change ttda_hook.xxx so that could be logged in wandb
