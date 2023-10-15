@@ -28,8 +28,7 @@ class TTDAHook(Hook):
 			Default: 50.
 	"""
 
-	def __init__(self, turn_on_adapt=False, **kwargs) -> None:
-		self.turn_on_adapt = turn_on_adapt
+	def __init__(self, **kwargs) -> None:
 		self.kwargs = Config(kwargs)
 
 	def fake_train_init(self, runner):
@@ -126,7 +125,7 @@ class TTDAHook(Hook):
 				}
 		"""
 		# init
-		if not self.turn_on_adapt: return
+		if not self.kwargs.turn_on_adapt: return
 		use_pseudo_label = self.kwargs.use_pseudo_label
 		slide_adapt = self.kwargs.slide_adapt
 		assert len(batch["inputs"]) == 1, "only support batch_size=1"
@@ -272,7 +271,7 @@ class TTDAHook(Hook):
 	### hooks
 	
 	def before_run(self, runner) -> None:
-		if not self.turn_on_adapt: return
+		if not self.kwargs.turn_on_adapt: return
 		# if self.mode == "test":
 		runner.logger.info('fake train init')
 		self.fake_train_init(runner)
