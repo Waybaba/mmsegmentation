@@ -127,8 +127,8 @@ class TTDAHook(Hook):
 		"""
 		# init
 		if not self.turn_on_adapt: return
-		USE_PSEUDO_LABEL = True
-		SLIDE_ADAPT = True
+		use_pseudo_label = self.kwargs.use_pseudo_label
+		slide_adapt = self.kwargs.slide_adapt
 		assert len(batch["inputs"]) == 1, "only support batch_size=1"
 		inputs, data_samples = batch["inputs"], batch["data_samples"]
 
@@ -216,12 +216,12 @@ class TTDAHook(Hook):
 				batch_pseudoed_slided['data_samples'].append(meta_pseudoed_this)
 		
 		### choose adapt
-		if SLIDE_ADAPT:
-			data_batch_for_adapt = batch_pseudoed_slided
-			if USE_PSEUDO_LABEL: data_batch_for_adapt = batch_slided
+		if slide_adapt:
+			data_batch_for_adapt = deepcopy(batch_pseudoed_slided) \
+				if use_pseudo_label else deepcopy(batch_slided)
 		else:
 			data_batch_for_adapt = deepcopy(batch)
-			if USE_PSEUDO_LABEL:
+			if use_pseudo_label:
 				for i in range(len(data_samples)):
 					data_batch_for_adapt["data_samples"][i].gt_sem_seg = batch_pseudoed[i].pred_sem_seg
 		data_batch_for_adapt_bak = deepcopy(data_batch_for_adapt)
