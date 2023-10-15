@@ -143,6 +143,13 @@ class TTDAHook(Hook):
             losses = model._run_forward(data_batch_for_adapt, mode='loss')  # type: ignore
         parsed_losses, log_vars = model.parse_losses(losses)  # type: ignore
         optim_wrapper.update_params(parsed_losses)
+
+        #
+        runner.visualizer.add_scalars({
+            "adapt/"+k: v.item() for k, v in log_vars.items()
+        })
+        dict_log = {k: "{:.2f}".format(v.item()) for k, v in log_vars.items()}
+        runner.logger.info(f"log_vars: {dict_log}")
     
     ### hooks
     

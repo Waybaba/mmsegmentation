@@ -1,8 +1,11 @@
 # @package _global_
 
+ttda_hook: 
+  type: TTDAHook
+  turn_on_adapt: true # for test source-only
+
 custom_hooks:
-  - type: TTDAHook
-    turn_on_adapt: true # for test source-only
+  - ${ttda_hook} # ! change ttda_hook.xxx so that could be logged in wandb
 
 default_hooks:
   visualization:
