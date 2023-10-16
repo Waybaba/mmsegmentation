@@ -173,7 +173,7 @@ class TTDAHook(Hook):
 					while len(self.buffer[cls.item()]) > 100*SIZE_RATIO: 
 						self.buffer[cls.item()] = self.buffer[cls.item()][::2]
 				
-			def cal_mask(self, seg_conf, top_p):
+			def cal_mask(self, seg_conf, seg_pred, top_p):
 				"""
 				return a mask shape as seg with True for high confidence,
 				cal top_p percent
@@ -184,7 +184,7 @@ class TTDAHook(Hook):
 						continue
 					all_confs = torch.tensor(confs).flatten()
 					threshold = all_confs.quantile(top_p)  # Notice that it's now `top_p` directly as we're marking high confidences
-					mask[(seg_conf == cls) & (seg_conf >= threshold)] = True  # Only change the mask where condition is met
+					mask[(seg_pred == cls) & (seg_conf >= threshold)] = True  # Only change the mask where condition is met
 				return mask
 		
 		if self.kwargs.high_conf_mask.turn_on:
@@ -195,6 +195,7 @@ class TTDAHook(Hook):
 			self.seg_masker.add_to_buffer(seg_conf, batch_pseudoed[0].pred_sem_seg.data[0])
 			hign_conf_mask = self.seg_masker.cal_mask(
 				seg_conf,
+				batch_pseudoed[0].pred_sem_seg.data[0],
 				self.kwargs.high_conf_mask.top_p
 			)
 			sem_seg_ = batch_pseudoed[0].pred_sem_seg.data[0]
