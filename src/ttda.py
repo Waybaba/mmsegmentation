@@ -15,6 +15,7 @@ from mmengine.model.efficient_conv_bn_eval import \
 	turn_on_efficient_conv_bn_eval
 import torch.nn.functional as F
 import cv2
+from mmengine.structures import BaseDataElement, PixelData
 
 @HOOKS.register_module()
 class TTDAHook(Hook):
@@ -103,7 +104,6 @@ class TTDAHook(Hook):
 		# runner.call_hook('after_run')
 		return None
 
-	
 	def ttda_before_test(self, runner, batch_idx, batch):
 		"""
 		input:
@@ -134,6 +134,65 @@ class TTDAHook(Hook):
 		# inference label
 		batch_pseudoed = runner.model.test_step(batch) # data_samples_[0].pred_sem_seg.shape = (512, 1024)
 
+		# top-p mask
+		# TODO each img should have some weight
+		# TODO if buffer is to long, half it by only keep the even index'
+		# TODO for cases where no class in buffer
+
+		class SegMasker:
+			""" 
+			Mask out low confidence pseudo-labels in seg
+			Detail: 
+				maintain a buffer of confidence of pixels for each class,
+				for each seg, set pixels to 255 if its confidence is not 
+				in top-p percent.
+			"""
+			def __init__(self):
+				self.buffer = {}
+
+			def add_to_buffer(self, seg_conf, seg_pred):
+				""" 
+				seg_conf: (H, W) with each pixel value as confidence (0-1)
+				seg_pred: (H, W) with each pixel value as predicted class
+				save confidence of each pixel for each class
+				"""
+				for cls in seg_pred.unique():
+					if cls.item() == 255:  # Skip the reserved value
+						continue
+					if cls.item() not in self.buffer:
+						self.buffer[cls.item()] = []
+					# Get confidences for pixels where the prediction matches the current class
+					cls_confs = seg_conf[seg_pred == cls].flatten().tolist()
+					self.buffer[cls.item()].extend(cls_confs)
+				
+			def cal_mask(self, seg_conf, top_p):
+				"""
+				return a mask shape as seg with True for high confidence,
+				cal top_p percent
+				"""
+				mask = torch.zeros_like(seg_conf, dtype=torch.bool)
+				for cls, confs in self.buffer.items():
+					if not confs:  # if no confidences stored for this class, skip
+						continue
+					all_confs = torch.tensor(confs).flatten()
+					threshold = all_confs.quantile(top_p)  # Notice that it's now `top_p` directly as we're marking high confidences
+					mask[(seg_conf == cls) & (seg_conf >= threshold)] = True  # Only change the mask where condition is met
+				return mask
+		
+		if self.kwargs.high_conf_mask.turn_on:
+			if batch_idx == 0: 
+				assert not hasattr(self, "seg_masker"), "seg_masker should not be init twice"
+				self.seg_masker = SegMasker()
+			seg_conf = F.softmax(batch_pseudoed[0].seg_logits.data, dim=0).max(0)[0]
+			self.seg_masker.add_to_buffer(seg_conf, batch_pseudoed[0].pred_sem_seg.data[0])
+			hign_conf_mask = self.seg_masker.cal_mask(
+				seg_conf,
+				self.kwargs.high_conf_mask.top_p
+			)
+			sem_seg_ = batch_pseudoed[0].pred_sem_seg.data[0]
+			sem_seg_[~hign_conf_mask] = 255
+			batch_pseudoed[0].pred_sem_seg = PixelData()
+			batch_pseudoed[0].pred_sem_seg.data = sem_seg_.unsqueeze(0)
 
 		# set data_batch_for_adapt for train
 
@@ -167,8 +226,7 @@ class TTDAHook(Hook):
 					return int(v * (self.seg_size[1] / self.img_size[1]))
 				else:
 					raise ValueError("Invalid type provided.")
-			
-
+		
 		batch_pseudoed_slided = {"inputs": [], "data_samples": []}
 		batch_slided = {"inputs": [], "data_samples": []}
 		# assert ori shape == seg shape

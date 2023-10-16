@@ -6,6 +6,16 @@ ttda_hook:
   adapt_img_vis_freq: ???
   use_pseudo_label: ???
   slide_adapt: ???
+  high_conf_mask:
+    turn_on: true
+    top_p: 0.1 # only keep top_p pixels, others set to 255
+
+optim_wrapper:
+  paramwise_cfg:
+    custom_keys:
+      backbone:
+        lr_mult: 0.0 # does not train backbone
+
 
 custom_hooks:
   - ${ttda_hook} # ! change ttda_hook.xxx so that could be logged in wandb
