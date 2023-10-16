@@ -104,7 +104,7 @@ class TTDAHook(Hook):
 		# runner.call_hook('after_run')
 		return None
 
-	def ttda_before_test(self, runner, batch_idx, batch):
+	def ttda_adapt(self, runner, batch_idx, batch):
 		"""
 		input:
 			inputs: 
@@ -183,7 +183,7 @@ class TTDAHook(Hook):
 					if not confs:  # if no confidences stored for this class, skip
 						continue
 					all_confs = torch.tensor(confs).flatten()
-					threshold = all_confs.quantile(top_p)  # Notice that it's now `top_p` directly as we're marking high confidences
+					threshold = all_confs.quantile(1-top_p)  # Notice that it's now `top_p` directly as we're marking high confidences
 					mask[(seg_pred == cls) & (seg_conf >= threshold)] = True  # Only change the mask where condition is met
 				return mask
 		
@@ -258,8 +258,6 @@ class TTDAHook(Hook):
 				# change the image shape to patch shape
 				data_sample_this = deepcopy(data_samples_tp)
 				# TODO change size, ... except for value
-				# data_samples_this.ori_shape = crop_img.shape[2:]
-
 				meta_info_ = data_sample_this.metainfo
 				meta_info_["img_shape"] = crop_img.shape[1:]
 				meta_info_["ori_shape"] = (st.trans(h_crop, 'h'), st.trans(w_crop, 'w'))
@@ -359,7 +357,7 @@ class TTDAHook(Hook):
 				Defaults to None.
 			outputs (dict, Optional): Outputs from model. Defaults to None.
 		"""
-		self.ttda_before_test(runner, batch_idx, data_batch)
+		self.ttda_adapt(runner, batch_idx, data_batch)
 
 	def after_test_epoch(self, runner, metrics):
 		# runner.logger.info('after test epoch')
