@@ -155,7 +155,11 @@ class TTDAHook(Hook):
 				seg_conf: (H, W) with each pixel value as confidence (0-1)
 				seg_pred: (H, W) with each pixel value as predicted class
 				save confidence of each pixel for each class
+				TODO here, we hope the buffer can be running, so that the new conf would be used
+					but if we use fixed size for each class, then the buffer would never be updated for rare class
+					if use time as indication, the rare class would be updated too frequently
 				"""
+				SIZE_RATIO = 20
 				for cls in seg_pred.unique():
 					if cls.item() == 255:  # Skip the reserved value
 						continue
@@ -163,7 +167,11 @@ class TTDAHook(Hook):
 						self.buffer[cls.item()] = []
 					# Get confidences for pixels where the prediction matches the current class
 					cls_confs = seg_conf[seg_pred == cls].flatten().tolist()
+					### TODO partial
+					while len(cls_confs) > 100: cls_confs = cls_confs[::2]
 					self.buffer[cls.item()].extend(cls_confs)
+					while len(self.buffer[cls.item()]) > 100*SIZE_RATIO: 
+						self.buffer[cls.item()] = self.buffer[cls.item()][::2]
 				
 			def cal_mask(self, seg_conf, top_p):
 				"""
