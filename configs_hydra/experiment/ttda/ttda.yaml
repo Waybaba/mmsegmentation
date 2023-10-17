@@ -20,7 +20,10 @@ optim_wrapper:
         lr_mult: 0.0 # does not train backbone
       .norm: # ! since we can not have . in name
         lr_mult: ${norm_lr_mult} # ! how to decide order?
-norm_lr_mult: 1.0
+      token_prompt:
+        lr_mult: 1.0
+        
+norm_lr_mult: 0.0
 
 custom_hooks:
   - ${ttda_hook} # ! change ttda_hook.xxx so that could be logged in wandb
@@ -36,6 +39,15 @@ train_cfg:
   val_interval: 100 # not used since this is TTDA
 
 load_from: ??? # ! load from mmseg model
+
+
+### TPT
+model:
+  backbone:
+    type: MixVisionTransformerTPT
+    tpt_cfg:
+      num_tokens: 1
+      weight_init_type: zero
 
 # model:
 #   test_cfg:

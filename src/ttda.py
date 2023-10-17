@@ -5,6 +5,8 @@ from mmengine.hooks import Hook
 from mmengine.runner import Runner
 import mmcv
 import mmengine.fileio as fileio
+import torch.nn as nn
+from collections.abc import Iterable
 
 from mmengine.config import Config, DictAction
 from copy import deepcopy
@@ -14,8 +16,239 @@ from mmengine.model import (MMDistributedDataParallel, convert_sync_batchnorm,
 from mmengine.model.efficient_conv_bn_eval import \
 	turn_on_efficient_conv_bn_eval
 import torch.nn.functional as F
+from mmseg.models.utils import PatchEmbed, nchw_to_nlc, nlc_to_nchw
+
+
 import cv2
 from mmengine.structures import BaseDataElement, PixelData
+from mmengine.registry import MODELS
+from mmseg.models.backbones import MixVisionTransformer
+import torch.utils.checkpoint as cp
+
+# ! TODO when use normal init, would cause pseudo label become unaccurate
+@MODELS.register_module()
+class MixVisionTransformerTPT(MixVisionTransformer):
+	"""The backbone of Segformer.
+
+	This backbone is the implementation of `SegFormer: Simple and
+	Efficient Design for Semantic Segmentation with
+	Transformers <https://arxiv.org/abs/2105.15203>`_.
+	Args:
+		in_channels (int): Number of input channels. Default: 3.
+		embed_dims (int): Embedding dimension. Default: 768.
+		num_stags (int): The num of stages. Default: 4.
+		num_layers (Sequence[int]): The layer number of each transformer encode
+			layer. Default: [3, 4, 6, 3].
+		num_heads (Sequence[int]): The attention heads of each transformer
+			encode layer. Default: [1, 2, 4, 8].
+		patch_sizes (Sequence[int]): The patch_size of each overlapped patch
+			embedding. Default: [7, 3, 3, 3].
+		strides (Sequence[int]): The stride of each overlapped patch embedding.
+			Default: [4, 2, 2, 2].
+		sr_ratios (Sequence[int]): The spatial reduction rate of each
+			transformer encode layer. Default: [8, 4, 2, 1].
+		out_indices (Sequence[int] | int): Output from which stages.
+			Default: (0, 1, 2, 3).
+		mlp_ratio (int): ratio of mlp hidden dim to embedding dim.
+			Default: 4.
+		qkv_bias (bool): Enable bias for qkv if True. Default: True.
+		drop_rate (float): Probability of an element to be zeroed.
+			Default 0.0
+		attn_drop_rate (float): The drop out rate for attention layer.
+			Default 0.0
+		drop_path_rate (float): stochastic depth rate. Default 0.0
+		norm_cfg (dict): Config dict for normalization layer.
+			Default: dict(type='LN')
+		act_cfg (dict): The activation config for FFNs.
+			Default: dict(type='GELU').
+		pretrained (str, optional): model pretrained path. Default: None.
+		init_cfg (dict or list[dict], optional): Initialization config dict.
+			Default: None.
+		with_cp (bool): Use checkpoint or not. Using checkpoint will save
+			some memory while slowing down the training speed. Default: False.
+	"""
+
+	def __init__(self,
+				 in_channels=3,
+				 embed_dims=64,
+				 num_stages=4,
+				 num_layers=[3, 4, 6, 3],
+				 num_heads=[1, 2, 4, 8],
+				 patch_sizes=[7, 3, 3, 3],
+				 strides=[4, 2, 2, 2],
+				 sr_ratios=[8, 4, 2, 1],
+				 out_indices=(0, 1, 2, 3),
+				 mlp_ratio=4,
+				 qkv_bias=True,
+				 drop_rate=0.,
+				 attn_drop_rate=0.,
+				 drop_path_rate=0.,
+				 act_cfg=dict(type='GELU'),
+				 norm_cfg=dict(type='LN', eps=1e-6),
+				 pretrained=None,
+				 init_cfg=None,
+				 with_cp=False,
+				 tpt_cfg=None
+				 ):
+		# super().__init__(init_cfg=init_cfg)
+		super().__init__(
+			in_channels=in_channels,
+			embed_dims=embed_dims,
+			num_stages=num_stages,
+			num_layers=num_layers,
+			num_heads=num_heads,
+			patch_sizes=patch_sizes,
+			strides=strides,
+			sr_ratios=sr_ratios,
+			out_indices=out_indices,
+			mlp_ratio=mlp_ratio,
+			qkv_bias=qkv_bias,
+			drop_rate=drop_rate,
+			attn_drop_rate=attn_drop_rate,
+			drop_path_rate=drop_path_rate,
+			act_cfg=act_cfg,
+			norm_cfg=norm_cfg,
+			pretrained=pretrained,
+			init_cfg=init_cfg,
+			with_cp=with_cp)
+		if tpt_cfg is not None:
+			self.tpt_cfg = tpt_cfg
+			
+			self.token_prompts = []
+			### make token_prompt parameters - len first (num_tokens, 1, embed_dims)
+			# if int, then use the same number of tokens for all layers
+			# elif float, then use the same percentage of tokens for all layers
+			# elif list
+			#     assert len(list) == len(layers)
+			#     assert does not contains float or int at the same time (0 does not count)
+			#     e.g. [0,0,10,0],[10,0,0,0], [0.1,0,0,0]
+			#     ps. 0 means no token
+			if isinstance(tpt_cfg.num_tokens, int):
+				self.num_tokens = [tpt_cfg.num_tokens] * len(self.layers)
+			elif isinstance(tpt_cfg.num_tokens, float):
+				raise NotImplementedError("can not use float for num_tokens")
+			elif isinstance(tpt_cfg.num_tokens, str):
+				raise TypeError("num_tokens can not be str")
+			elif isinstance(tpt_cfg.num_tokens, Iterable):
+				assert len(tpt_cfg.num_tokens) == len(self.layers)
+				assert all([isinstance(x, int) or x is None for x in tpt_cfg.num_tokens])
+				self.num_tokens = tpt_cfg.num_tokens
+			else:
+				raise NotImplementedError("num_tokens must be int, float or list")
+			if tpt_cfg.weight_init_type == "zero":
+				init_func_q = nn.init.zeros_
+				init_func_kv = nn.init.zeros_
+			elif tpt_cfg.weight_init_type == "normal":
+				init_func_q = nn.init.normal_
+				init_func_kv = nn.init.normal_
+			elif tpt_cfg.weight_init_type == "kv_normal":
+				init_func_q = nn.init.zeros_
+				init_func_kv = nn.init.normal_
+			elif tpt_cfg.weight_init_type == "q_normal":
+				init_func_q = nn.init.normal_
+				init_func_kv = nn.init.zeros_
+			else:
+				raise NotImplementedError(f"weight_init_type {tpt_cfg.weight_init_type} is not implemented")
+			# generate random variables for token prompts
+			for i, layer in enumerate(self.layers):
+				if self.num_tokens[i] is not None:	
+					w_q = torch.zeros(self.num_tokens[i], 1, self.embed_dims*self.num_heads[i])
+					w_kv = torch.zeros(self.num_tokens[i], 1, self.embed_dims*self.num_heads[i])
+					self.token_prompts.append({
+						"q": nn.Parameter(init_func_q(w_q)),
+						"kv": nn.Parameter(init_func_kv(w_kv)),
+					})
+				else:
+					self.token_prompts.append(None)
+			# register parameters
+			for i, layer in enumerate(self.layers):
+				if self.token_prompts[i] is not None:
+					self.register_parameter(f"token_prompt_q_{i}", self.token_prompts[i]["q"])
+					self.register_parameter(f"token_prompt_kv_{i}", self.token_prompts[i]["kv"])
+	
+	def forward(self, x):
+		outs = []
+
+		for i, layer in enumerate(self.layers):
+			x, hw_shape = layer[0](x)
+			for block in layer[1]:
+				# x = block(x, hw_shape) # ! origin from mmseg
+				x = self.TEL_forward(block, x, hw_shape, self.token_prompts[i])
+			x = layer[2](x)
+			x = nlc_to_nchw(x, hw_shape)
+			if i in self.out_indices:
+				outs.append(x)
+
+		return outs	
+
+	def TEL_forward(self, model, x, hw_shape, token_prompt=None):
+
+		def _inner_forward(x):
+			# x = model.attn(model.norm1(x), hw_shape, identity=x)
+			x = self.EMHA_forward(model.attn, model.norm1(x), hw_shape, identity=x, token_prompt=token_prompt)
+			# x = model.ffn(model.norm2(x), hw_shape, identity=x)
+			x = self.MixFFN_forward(model.ffn, model.norm2(x), hw_shape, identity=x, token_prompt=token_prompt)
+			return x
+
+		if model.with_cp and x.requires_grad:
+			x = cp.checkpoint(_inner_forward, x)
+		else:
+			x = _inner_forward(x)
+		return x
+
+	def EMHA_forward(self, model, x, hw_shape, identity=None, token_prompt=None):
+		x_q = x
+		if model.sr_ratio > 1:
+			x_kv = nlc_to_nchw(x, hw_shape)
+			x_kv = model.sr(x_kv)
+			x_kv = nchw_to_nlc(x_kv)
+			x_kv = model.norm(x_kv)
+		else:
+			x_kv = x
+
+		if identity is None:
+			identity = x_q
+
+		# Because the dataflow('key', 'query', 'value') of
+		# ``torch.nn.MultiheadAttention`` is (num_query, batch,
+		# embed_dims), We should adjust the shape of dataflow from
+		# batch_first (batch, num_query, embed_dims) to num_query_first
+		# (num_query ,batch, embed_dims), and recover ``attn_output``
+		# from num_query_first to batch_first.
+		if model.batch_first:
+			x_q = x_q.transpose(0, 1)
+			x_kv = x_kv.transpose(0, 1)
+		##### ! token prompt - start
+		# add token prompt
+		# x_q,x_kv (len, batch, dim)  token_prompt (token_num, 1, dim)
+		if token_prompt is not None:
+			token_prompt["q"] = token_prompt["q"].to(x_q.device)
+			token_prompt_q = token_prompt["q"].expand(-1, x_q.shape[1], -1)
+			x_q = torch.cat([x_q, token_prompt_q], dim=0)
+			token_prompt["kv"] = token_prompt["kv"].to(x_kv.device)
+			token_prompt_kv = token_prompt["kv"].expand(-1, x_kv.shape[1], -1)
+			x_kv = torch.cat([x_kv, token_prompt_kv], dim=0)
+		##### ! token prompt - end
+		out = model.attn(query=x_q, key=x_kv, value=x_kv)[0]
+		##### ! token prompt - start
+		# remove token prompt from output
+		if token_prompt is not None:
+			out = out[:-token_prompt["q"].shape[0]]
+		##### ! token prompt - end
+
+
+		if model.batch_first:
+			out = out.transpose(0, 1)
+
+		return identity + model.dropout_layer(model.proj_drop(out))
+
+	def MixFFN_forward(self, model, x, hw_shape, identity=None, token_prompt=None):
+		out = nlc_to_nchw(x, hw_shape)
+		out = model.layers(out)
+		out = nchw_to_nlc(out)
+		if identity is None:
+			identity = x
+		return identity + model.dropout_layer(out)
 
 
 @HOOKS.register_module()
