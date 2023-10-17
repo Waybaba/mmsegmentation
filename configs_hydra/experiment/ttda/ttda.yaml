@@ -9,7 +9,7 @@ ttda_hook:
   slide_adapt: ???
   high_conf_mask:
     turn_on: true
-    top_p: 0.1 # only keep top_p pixels, others set to 255
+    top_p: 0.3 # only keep top_p pixels, others set to 255
 
 optim_wrapper:
   paramwise_cfg:
@@ -22,8 +22,7 @@ optim_wrapper:
         lr_mult: ${norm_lr_mult} # ! how to decide order?
       token_prompt:
         lr_mult: 1.0
-        
-norm_lr_mult: 0.0
+norm_lr_mult: 1.0
 
 custom_hooks:
   - ${ttda_hook} # ! change ttda_hook.xxx so that could be logged in wandb
