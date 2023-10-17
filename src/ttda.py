@@ -132,7 +132,12 @@ class TTDAHook(Hook):
 		inputs, data_samples = batch["inputs"], batch["data_samples"]
 
 		# inference label
-		batch_pseudoed = runner.model.test_step(batch) # data_samples_[0].pred_sem_seg.shape = (512, 1024)
+		if not hasattr(self, "model_ori"): # source model for pseudo
+			assert batch_idx == 0, "model_ori should be init only once"
+			self.model_ori = deepcopy(runner.model)
+		batch_pseudoed_model = self.model_ori if self.kwargs.pseudo_use_ori \
+			else runner.model
+		batch_pseudoed = batch_pseudoed_model.test_step(batch)
 
 		# top-p mask
 		# TODO each img should have some weight

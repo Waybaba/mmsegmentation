@@ -5,6 +5,7 @@ ttda_hook:
   turn_on_adapt: true # for test source-only
   adapt_img_vis_freq: ???
   use_pseudo_label: ???
+  pseudo_use_ori: true # use freezed source label for pseudo label
   slide_adapt: ???
   high_conf_mask:
     turn_on: true
