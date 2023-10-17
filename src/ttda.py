@@ -17,6 +17,7 @@ import torch.nn.functional as F
 import cv2
 from mmengine.structures import BaseDataElement, PixelData
 
+
 @HOOKS.register_module()
 class TTDAHook(Hook):
 	"""Check invalid loss hook.

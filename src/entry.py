@@ -9,6 +9,7 @@ from omegaconf.dictconfig import DictConfig
 from omegaconf.listconfig import ListConfig
 from mmengine.config import Config, DictAction
 import src.ttda
+import wandb
 
 def parse_tuple(cfg):
     """
@@ -67,7 +68,8 @@ def main(cfg):
         runner.train()
     if cfg.test: 
         metrics = runner.test()
-        
+    
+    wandb.finish()
 
 if __name__ == "__main__":
     main()
