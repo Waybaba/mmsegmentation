@@ -28,46 +28,6 @@ import torch.utils.checkpoint as cp
 # ! TODO when use normal init, would cause pseudo label become unaccurate
 @MODELS.register_module()
 class MixVisionTransformerTPT(MixVisionTransformer):
-	"""The backbone of Segformer.
-
-	This backbone is the implementation of `SegFormer: Simple and
-	Efficient Design for Semantic Segmentation with
-	Transformers <https://arxiv.org/abs/2105.15203>`_.
-	Args:
-		in_channels (int): Number of input channels. Default: 3.
-		embed_dims (int): Embedding dimension. Default: 768.
-		num_stags (int): The num of stages. Default: 4.
-		num_layers (Sequence[int]): The layer number of each transformer encode
-			layer. Default: [3, 4, 6, 3].
-		num_heads (Sequence[int]): The attention heads of each transformer
-			encode layer. Default: [1, 2, 4, 8].
-		patch_sizes (Sequence[int]): The patch_size of each overlapped patch
-			embedding. Default: [7, 3, 3, 3].
-		strides (Sequence[int]): The stride of each overlapped patch embedding.
-			Default: [4, 2, 2, 2].
-		sr_ratios (Sequence[int]): The spatial reduction rate of each
-			transformer encode layer. Default: [8, 4, 2, 1].
-		out_indices (Sequence[int] | int): Output from which stages.
-			Default: (0, 1, 2, 3).
-		mlp_ratio (int): ratio of mlp hidden dim to embedding dim.
-			Default: 4.
-		qkv_bias (bool): Enable bias for qkv if True. Default: True.
-		drop_rate (float): Probability of an element to be zeroed.
-			Default 0.0
-		attn_drop_rate (float): The drop out rate for attention layer.
-			Default 0.0
-		drop_path_rate (float): stochastic depth rate. Default 0.0
-		norm_cfg (dict): Config dict for normalization layer.
-			Default: dict(type='LN')
-		act_cfg (dict): The activation config for FFNs.
-			Default: dict(type='GELU').
-		pretrained (str, optional): model pretrained path. Default: None.
-		init_cfg (dict or list[dict], optional): Initialization config dict.
-			Default: None.
-		with_cp (bool): Use checkpoint or not. Using checkpoint will save
-			some memory while slowing down the training speed. Default: False.
-	"""
-
 	def __init__(self,
 				 in_channels=3,
 				 embed_dims=64,
@@ -398,7 +358,7 @@ class TTDAHook(Hook):
 					but if we use fixed size for each class, then the buffer would never be updated for rare class
 					if use time as indication, the rare class would be updated too frequently
 				"""
-				SIZE_RATIO = 20
+				SIZE_RATIO = 500
 				for cls in seg_pred.unique():
 					if cls.item() == 255:  # Skip the reserved value
 						continue
@@ -407,9 +367,9 @@ class TTDAHook(Hook):
 					# Get confidences for pixels where the prediction matches the current class
 					cls_confs = seg_conf[seg_pred == cls].flatten().tolist()
 					### TODO partial
-					while len(cls_confs) > 100: cls_confs = cls_confs[::2]
+					while len(cls_confs) > 1000: cls_confs = cls_confs[::2]
 					self.buffer[cls.item()].extend(cls_confs)
-					while len(self.buffer[cls.item()]) > 100*SIZE_RATIO: 
+					while len(self.buffer[cls.item()]) > 1000*SIZE_RATIO: 
 						self.buffer[cls.item()] = self.buffer[cls.item()][::2]
 				
 			def cal_mask(self, seg_conf, seg_pred, top_p):

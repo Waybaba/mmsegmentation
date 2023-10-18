@@ -1,6 +1,6 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 import pyrootutils
-root = pyrootutils.setup_root(__file__, dotenv=True, pythonpath=True, indicator=["configs"])
+root = pyrootutils.setup_root(__file__, dotenv=True, pythonpath=True, indicator=[".env"])
 from mmengine.runner import Runner
 import hydra
 from mmseg.registry import RUNNERS
@@ -42,17 +42,35 @@ def parse_tuple(cfg):
     # Return original value for non-list or non-dict types
     return cfg
 
+def link_output(cfg):
+	"""
+		link the output_dir to ./debug/latest/output/ for easier access
+		if there exists a previous link, delete it first
+		note that the parent dir could miss, so create it if necessary
+	"""
+	import os
+	from pathlib import Path
+
+	output_dir = Path(cfg.paths.output_dir)
+	root = Path.cwd()
+	latest_dir = root / "debug" / "latest" / "output"
+	
+	latest_dir.parent.mkdir(parents=True, exist_ok=True)
+
+	if latest_dir.is_symlink():
+		latest_dir.unlink()
+	
+	os.symlink(output_dir, latest_dir)
+
+	print(f"Linked output_dir to {latest_dir}")
 
 @hydra.main(version_base=None, config_path=str(root / "configs_hydra"), config_name="entry.yaml")	
 def main(cfg):
-	# if not os.path.exists(root / ".env"):
-		# raise FileNotFoundError("Please create .env file in the root directory. See .env.example for reference.")
 
-    # to pure dict recursively
-    cfg = parse_tuple(cfg) # can keep tuple but can not parse path
-
-    # to mmcv cfg
-    cfg = Config(cfg)
+    cfg = parse_tuple(cfg) # to pure dict recursively
+    cfg = Config(cfg) # mmcv cfg
+    
+    link_output(cfg)
 
     # build the runner from config
     if 'runner_type' not in cfg:
@@ -64,10 +82,8 @@ def main(cfg):
         runner = RUNNERS.build(cfg)
 
     # start training
-    if cfg.train: 
-        runner.train()
-    if cfg.test: 
-        metrics = runner.test()
+    if cfg.train:  runner.train()
+    if cfg.test:  metrics = runner.test()
     
     wandb.finish()
 
