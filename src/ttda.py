@@ -236,7 +236,7 @@ class EncoderDecoderWrapper(EncoderDecoder):
 						new_mean = class_feats.mean(dim=1, keepdim=False)
 						if self.cfg.lambda_ == "count":
 							updated_mean = (self.protos_mean[class_label] * self.protos_count[class_label] + new_mean * new_count) / (self.protos_count[class_label] + new_count)
-						elif isinstance(self.cfg.lambda_, float):
+						elif isinstance(self.cfg.lambda_, (float,int)):
 							updated_mean = (self.protos_mean[class_label] * self.cfg.lambda_ + new_mean * (1 - self.cfg.lambda_))
 						self.protos_mean[class_label] = updated_mean
 						self.protos_count[class_label] += new_count
