@@ -16,18 +16,542 @@ from mmengine.model import (MMDistributedDataParallel, convert_sync_batchnorm,
 from mmengine.model.efficient_conv_bn_eval import \
 	turn_on_efficient_conv_bn_eval
 import torch.nn.functional as F
-from mmseg.models.utils import PatchEmbed, nchw_to_nlc, nlc_to_nchw
+from mmseg.models.utils import PatchEmbed, nchw_to_nlc, nlc_to_nchw, resize
+from functools import partial
 
 
 import cv2
 from mmengine.structures import BaseDataElement, PixelData
 from mmengine.registry import MODELS
 from mmseg.models.backbones import MixVisionTransformer
+from mmseg.models import EncoderDecoder
 import torch.utils.checkpoint as cp
+
+
+@MODELS.register_module()
+class EncoderDecoderWrapper(EncoderDecoder):
+	""" Modifications: to get last layer feature
+		as in paper https://github.com/matsuolab/T3A
+	"""
+	def train_step(self, data, optim_wrapper):
+		# Enable automatic mixed precision training context.
+		with optim_wrapper.optim_context(self):
+			data = self.data_preprocessor(data, True)
+			losses = self._run_forward(data, mode='loss')  # type: ignore
+		parsed_losses, log_vars = self.parse_losses(losses)  # type: ignore
+		optim_wrapper.update_params(parsed_losses)
+		return log_vars
+
+	def test_step(self, data):
+		"""``BaseModel`` implements ``test_step`` the same as ``val_step``.
+
+		Args:
+			data (dict or tuple or list): Data sampled from dataset.
+
+		Returns:
+			list: The predictions of given data.
+		"""
+		data = self.data_preprocessor(data, False)
+		return self._run_forward(data, mode='predict')  # type: ignore
+
+	def _run_forward(self, data, mode):
+		"""Unpacks data for :meth:`forward`
+
+		Args:
+			data (dict or tuple or list): Data sampled from dataset.
+			mode (str): Mode of forward.
+
+		Returns:
+			dict or list: Results of training or testing mode.
+		"""
+		if isinstance(data, dict):
+			results = self(**data, mode=mode)
+		elif isinstance(data, (list, tuple)):
+			results = self(*data, mode=mode)
+		else:
+			raise TypeError('Output of `data_preprocessor` should be '
+							f'list, tuple or dict, but got {type(data)}')
+		return results
+
+	def forward(self, inputs, data_samples = None, mode = 'tensor'):
+		"""The unified entry for a forward process in both training and test.
+
+		The method should accept three modes: "tensor", "predict" and "loss":
+
+		- "tensor": Forward the whole network and return tensor or tuple of
+		tensor without any post-processing, same as a common nn.Module.
+		- "predict": Forward and return the predictions, which are fully
+		processed to a list of :obj:`SegDataSample`.
+		- "loss": Forward and return a dict of losses according to the given
+		inputs and data samples.
+
+		Note that this method doesn't handle neither back propagation nor
+		optimizer updating, which are done in the :meth:`train_step`.
+
+		Args:
+			inputs (torch.Tensor): The input tensor with shape (N, C, ...) in
+				general.
+			data_samples (list[:obj:`SegDataSample`]): The seg data samples.
+				It usually includes information such as `metainfo` and
+				`gt_sem_seg`. Default to None.
+			mode (str): Return what kind of value. Defaults to 'tensor'.
+
+		Returns:
+			The return type depends on ``mode``.
+
+			- If ``mode="tensor"``, return a tensor or a tuple of tensor.
+			- If ``mode="predict"``, return a list of :obj:`DetDataSample`.
+			- If ``mode="loss"``, return a dict of tensor.
+		"""
+		if mode == 'loss':
+			return self.loss(inputs, data_samples)
+		elif mode == 'predict':
+			return self.predict(inputs, data_samples)
+		elif mode == 'tensor':
+			return self._forward(inputs, data_samples)
+		else:
+			raise RuntimeError(f'Invalid mode "{mode}". '
+							   'Only supports loss, predict and tensor mode')
+
+	def loss(self, inputs, data_samples):
+		"""Calculate losses from a batch of inputs and data samples.
+
+		Args:
+			inputs (Tensor): Input images.
+			data_samples (list[:obj:`SegDataSample`]): The seg data samples.
+				It usually includes information such as `metainfo` and
+				`gt_sem_seg`.
+
+		Returns:
+			dict[str, Tensor]: a dictionary of loss components
+		"""
+
+		x = self.extract_feat(inputs)
+
+		losses = dict()
+
+		loss_decode = self._decode_head_forward_train(x, data_samples)
+		losses.update(loss_decode)
+
+		if self.with_auxiliary_head:
+			loss_aux = self._auxiliary_head_forward_train(x, data_samples)
+			losses.update(loss_aux)
+
+		return losses
+
+	def predict(self, inputs, data_samples):
+		"""Predict results from a batch of inputs and data samples with post-
+		processing.
+
+		Args:
+			inputs (Tensor): Inputs with shape (N, C, H, W).
+			data_samples (List[:obj:`SegDataSample`], optional): The seg data
+				samples. It usually includes information such as `metainfo`
+				and `gt_sem_seg`.
+
+		Returns:
+			list[:obj:`SegDataSample`]: Segmentation results of the
+			input images. Each SegDataSample usually contain:
+
+			- ``pred_sem_seg``(PixelData): Prediction of semantic segmentation.
+			- ``seg_logits``(PixelData): Predicted logits of semantic
+				segmentation before normalization.
+		"""
+		if data_samples is not None:
+			batch_img_metas = [
+				data_sample.metainfo for data_sample in data_samples
+			]
+		else:
+			batch_img_metas = [
+				dict(
+					ori_shape=inputs.shape[2:],
+					img_shape=inputs.shape[2:],
+					pad_shape=inputs.shape[2:],
+					padding_size=[0, 0, 0, 0])
+			] * inputs.shape[0]
+
+		seg_logits = self.inference(inputs, batch_img_metas)
+
+		return self.postprocess_result(seg_logits, data_samples)
+
+	# more
+	def test_step_proto_predict(self, data, cfg=None):
+		"""
+		TODO remember to reset buffer
+		TODO 255 class hwo to handle
+		here, cfg is set by partial at init stage of runner
+		"""
+		data = self.data_preprocessor(data, False)
+		res = self._run_forward_plus(data, mode='predict')  # type: ignore
+
+		class ProtoClassifier:
+			"""
+				cfg: 
+					rho: 0.5 # for updating prototype, history_proto = (1-rho) * history_proto + rho * proto_this_img
+					lambda_: count # for using prototype, final_proto = lambda_ * history_proto + (1 - lambda_) * proto_this_img. if "count", use count as lambda
+			"""
+			def __init__(self, cfg):
+				self.protos_mean = {}  # Dictionary to store means for each class: {class_label: tensor of shape [C, H, W]}
+				self.protos_count = {}  # Dictionary to store count of pixels for each class: {class_label: int}
+				self.cfg = cfg # use by self.cfg.rho and self.cfg.lambda_
+
+			def add_sample(self, feats, logits, pred):
+				"""
+				feats: C, H, W
+				pred_sem_seg: 1, H, W 
+				note case that some classes are missing in history,
+				or this is the first time to see this class
+				"""
+				confidence = torch.softmax(logits, dim=0).max(dim=0)[0]  # shape: [1, H, W]
+				entropy = -torch.sum(torch.log_softmax(logits, dim=0) * torch.softmax(logits, dim=0), dim=0)  # shape: [1, H, W]
+
+				# proto_mask_metric
+				if cfg.proto_mask_metric is not None:
+					assert cfg.proto_mask_metric in ["confidence", "entropy"], f"cfg.proto_mask_metric should be confidence or entropy, but got {cfg.proto_mask_metric}"
+					seg_metric = confidence if cfg.proto_mask_metric == "confidence" \
+						else -entropy # use neg since seg_mask only keep higher
+					if not hasattr(self, "seg_masker"):
+						self.seg_masker = SegMasker(use_history=cfg.proto_mask_use_history)
+					self.seg_masker.add_to_buffer(seg_metric, pred[0])
+					hign_conf_mask = self.seg_masker.cal_mask(
+						seg_metric,
+						pred[0],
+						cfg.proto_mask_top_p
+					)
+					pred[0][~hign_conf_mask] = 255 # to 255 and skip in the following
+
+				# Iterate over the unique classes in pred_sem_seg
+				for class_label in torch.unique(pred):
+					class_label = class_label.item()
+					if class_label == 255: 
+						continue # 
+					class_feats = feats[:, pred[0] == class_label]  # Extract features corresponding to this class
+					if class_label not in self.protos_mean:
+						# If the class is not seen before, simply set the mean and count
+						self.protos_mean[class_label] = class_feats.mean(dim=1, keepdim=False)
+						self.protos_count[class_label] = class_feats.size(1)
+					else:
+						# Update mean and count using the provided formula
+						new_count = class_feats.size(1)
+						new_mean = class_feats.mean(dim=1, keepdim=False)
+						if self.cfg.lambda_ == "count":
+							updated_mean = (self.protos_mean[class_label] * self.protos_count[class_label] + new_mean * new_count) / (self.protos_count[class_label] + new_count)
+						elif isinstance(self.cfg.lambda_, float):
+							updated_mean = (self.protos_mean[class_label] * self.cfg.lambda_ + new_mean * (1 - self.cfg.lambda_))
+						self.protos_mean[class_label] = updated_mean
+						self.protos_count[class_label] += new_count
+
+			def predict(self, feats):
+				"""
+				feats: C, H, W
+				return pred_sem_seg data: 1, H, W
+				"""
+				C, H, W = feats.shape
+				pred_sem_seg = torch.zeros(1, H, W).long().to(feats.device)
+
+				# Extract the prototypes from the current image
+				proto_this_img_list = []
+				class_labels_list = list(self.protos_mean.keys())
+				for class_label in class_labels_list:
+					class_feats = feats[:, pred_sem_seg[0] == class_label]  # Extract features corresponding to this class
+					if class_feats.size(1) != 0:  # Check if the class exists in this image
+						proto_this_img = class_feats.mean(dim=1, keepdim=False)
+						proto_this_img_list.append(proto_this_img)
+					else:
+						proto_this_img_list.append(self.protos_mean[class_label])  # If class not in image, use the historical prototype
+
+				# Combine historical prototypes and the prototypes from the current image
+				combined_protos = [(1 - self.cfg.rho) * history_proto + self.cfg.rho * proto_this_img
+								for history_proto, proto_this_img in zip(self.protos_mean.values(), proto_this_img_list)]
+
+				# Convert combined_protos to tensor
+				proto_tensor = torch.stack(combined_protos, dim=0).to(feats.device)  # shape: [num_classes, C]
+
+				# Reshape feats for distance computation
+				feats_reshaped = feats.view(C, -1).transpose(0, 1)  # shape: [H*W, C]
+
+				# Compute distances
+				distances = torch.cdist(feats_reshaped, proto_tensor)  # shape: [H*W, num_classes]
+
+				# Get the class labels for the minimum distances
+				_, pred_class_indices = distances.min(dim=1)
+
+				# Map the indices back to actual class labels
+				pred_labels = torch.tensor(class_labels_list, dtype=torch.long).to(feats.device)
+				pred_sem_seg[0] = pred_labels[pred_class_indices].view(H, W)
+
+				return pred_sem_seg
+
+			def reset(self):
+				"""
+				Resets the learned prototypes.
+				"""
+				self.protos_mean = {}
+				self.protos_count = {}
+
+		if not hasattr(self, 'protos_classifier'):
+			self.protos_classifier = ProtoClassifier(cfg)
+		for i, d in enumerate(res):
+			# TODO add confidence threshold
+			self.protos_classifier.add_sample(res[i].feats.data, res[i].seg_logits.data, res[i].pred_sem_seg.data)
+			pred = self.protos_classifier.predict(res[i].feats.data)
+			res[i].pred_sem_seg.data = pred
+		return res
+
+	def test_step_plus(self, data):
+		"""``BaseModel`` implements ``test_step`` the same as ``val_step``.
+
+		Args:
+			data (dict or tuple or list): Data sampled from dataset.
+
+		Returns:
+			list: The predictions of given data.
+		"""
+		data = self.data_preprocessor(data, False)
+		return self._run_forward_plus(data, mode='predict')  # type: ignore
+
+	def _run_forward_plus(self, data, mode):
+		"""Unpacks data for :meth:`forward`
+
+		Args:
+			data (dict or tuple or list): Data sampled from dataset.
+			mode (str): Mode of forward.
+
+		Returns:
+			dict or list: Results of training or testing mode.
+		"""
+		if isinstance(data, dict):
+			results = self.forward_plus(**data, mode=mode)
+		elif isinstance(data, (list, tuple)):
+			results = self.forward_plus(*data, mode=mode)
+		else:
+			raise TypeError('Output of `data_preprocessor` should be '
+							f'list, tuple or dict, but got {type(data)}')
+		return results
+
+	def forward_plus(self, inputs, data_samples = None, mode = 'tensor'):
+		"""The unified entry for a forward process in both training and test.
+
+		The method should accept three modes: "tensor", "predict" and "loss":
+
+		- "tensor": Forward the whole network and return tensor or tuple of
+		tensor without any post-processing, same as a common nn.Module.
+		- "predict": Forward and return the predictions, which are fully
+		processed to a list of :obj:`SegDataSample`.
+		- "loss": Forward and return a dict of losses according to the given
+		inputs and data samples.
+
+		Note that this method doesn't handle neither back propagation nor
+		optimizer updating, which are done in the :meth:`train_step`.
+
+		Args:
+			inputs (torch.Tensor): The input tensor with shape (N, C, ...) in
+				general.
+			data_samples (list[:obj:`SegDataSample`]): The seg data samples.
+				It usually includes information such as `metainfo` and
+				`gt_sem_seg`. Default to None.
+			mode (str): Return what kind of value. Defaults to 'tensor'.
+
+		Returns:
+			The return type depends on ``mode``.
+
+			- If ``mode="tensor"``, return a tensor or a tuple of tensor.
+			- If ``mode="predict"``, return a list of :obj:`DetDataSample`.
+			- If ``mode="loss"``, return a dict of tensor.
+		"""
+		if mode == 'loss':
+			return self.loss_plus(inputs, data_samples)
+		elif mode == 'predict':
+			return self.predict_plus(inputs, data_samples)
+		elif mode == 'tensor':
+			return self._forward(inputs, data_samples)
+		else:
+			raise RuntimeError(f'Invalid mode "{mode}". '
+							   'Only supports loss, predict and tensor mode')
+
+	def loss_plus(self, inputs, data_samples):
+		"""Calculate losses from a batch of inputs and data samples.
+
+		Args:
+			inputs (Tensor): Input images.
+			data_samples (list[:obj:`SegDataSample`]): The seg data samples.
+				It usually includes information such as `metainfo` and
+				`gt_sem_seg`.
+
+		Returns:
+			dict[str, Tensor]: a dictionary of loss components
+		"""
+
+		x = self.extract_feat(inputs)
+
+		losses = dict()
+
+		loss_decode = self._decode_head_forward_train(x, data_samples)
+		losses.update(loss_decode)
+
+		if self.with_auxiliary_head:
+			loss_aux = self._auxiliary_head_forward_train(x, data_samples)
+			losses.update(loss_aux)
+
+		return losses
+
+	def predict_plus(self, inputs, data_samples):
+		"""Predict results from a batch of inputs and data samples with post-
+		processing.
+
+		Args:
+			inputs (Tensor): Inputs with shape (N, C, H, W).
+			data_samples (List[:obj:`SegDataSample`], optional): The seg data
+				samples. It usually includes information such as `metainfo`
+				and `gt_sem_seg`.
+
+		Returns:
+			list[:obj:`SegDataSample`]: Segmentation results of the
+			input images. Each SegDataSample usually contain:
+
+			- ``pred_sem_seg``(PixelData): Prediction of semantic segmentation.
+			- ``seg_logits``(PixelData): Predicted logits of semantic
+				segmentation before normalization.
+		"""
+		if data_samples is not None:
+			batch_img_metas = [
+				data_sample.metainfo for data_sample in data_samples
+			]
+		else:
+			batch_img_metas = [
+				dict(
+					ori_shape=inputs.shape[2:],
+					img_shape=inputs.shape[2:],
+					pad_shape=inputs.shape[2:],
+					padding_size=[0, 0, 0, 0])
+			] * inputs.shape[0]
+
+		seg_logits, feats = self.inference_plus(inputs, batch_img_metas)
+
+		res = self.postprocess_result(seg_logits, data_samples)
+
+		# @waybaba add feat into TODO
+		# copy code from self.postprocess_result
+		batch_size, C, H, W = feats.shape
+		for i in range(len(res)):
+			
+			img_meta = data_samples[i].metainfo
+			# remove padding area
+			if 'img_padding_size' not in img_meta:
+				padding_size = img_meta.get('padding_size', [0] * 4)
+			else:
+				padding_size = img_meta['img_padding_size']
+			padding_left, padding_right, padding_top, padding_bottom =\
+				padding_size
+			# i_feats shape is 1, C, H, W after remove padding
+			i_feats = feats[i:i + 1, :,
+										padding_top:H - padding_bottom,
+										padding_left:W - padding_right]
+
+			flip = img_meta.get('flip', None)
+			if flip:
+				flip_direction = img_meta.get('flip_direction', None)
+				assert flip_direction in ['horizontal', 'vertical']
+				if flip_direction == 'horizontal':
+					i_feats = i_feats.flip(dims=(3, ))
+				else:
+					i_feats = i_feats.flip(dims=(2, ))
+
+			# resize as original shape
+			i_feats = resize(
+				i_feats,
+				size=img_meta['ori_shape'],
+				mode='bilinear',
+				align_corners=self.align_corners,
+				warning=False).squeeze(0)
+			res[i].feats = PixelData()
+			res[i].feats.data = i_feats
+
+		return res
+
+	def inference_plus(self, inputs, batch_img_metas):
+		"""Inference with slide/whole style.
+
+		Args:
+			inputs (Tensor): The input image of shape (N, 3, H, W).
+			batch_img_metas (List[dict]): List of image metainfo where each may
+				also contain: 'img_shape', 'scale_factor', 'flip', 'img_path',
+				'ori_shape', 'pad_shape', and 'padding_size'.
+				For details on the values of these keys see
+				`mmseg/datasets/pipelines/formatting.py:PackSegInputs`.
+
+		Returns:
+			Tensor: The segmentation results, seg_logits from model of each
+				input image.
+		"""
+		assert self.test_cfg.get('mode', 'whole') in ['slide', 'whole'], \
+			f'Only "slide" or "whole" test mode are supported, but got ' \
+			f'{self.test_cfg["mode"]}.'
+		ori_shape = batch_img_metas[0]['ori_shape']
+		if self.test_cfg.mode == 'slide':
+			assert NotImplementedError("slide inference not implemented")
+			seg_logit = self.slide_inference(inputs, batch_img_metas)
+		else:
+			seg_logit, feats = self.whole_inference_plus(inputs, batch_img_metas)
+
+		return seg_logit, feats
+
+	def whole_inference_plus(self, inputs, batch_img_metas):
+	
+		# seg_logits, feats= self.encode_decode(inputs, batch_img_metas)
+		seg_logits, feats= self.encode_decode_with_feats(inputs, batch_img_metas)
+
+		return seg_logits, feats
+
+	def encode_decode_with_feats(self, inputs, batch_img_metas):
+		encode_out = self.extract_feat(inputs)
+		# seg_logits = self.decode_head.predict(x, batch_img_metas,
+		# 									  self.test_cfg) # @waybaba replace by the following two
+		# seg_logits = self.decode_head.forward(encode_out) # @waybaba replace by the folowing
+		# seg_logits = self.predict_by_feat(seg_logits, batch_img_metas) # @waybaba move the end of this function
+
+
+
+		### from models.xxx TODO self.decode_head.forward(encode_out)
+		inputs = self.decode_head._transform_inputs(encode_out)
+		outs = []
+		for idx in range(len(inputs)):
+			x = inputs[idx]
+			conv = self.decode_head.convs[idx]
+			outs.append(
+				resize(
+					input=conv(x),
+					size=inputs[0].shape[2:],
+					mode=self.decode_head.interpolate_mode,
+					align_corners=self.decode_head.align_corners))
+
+		feats = self.decode_head.fusion_conv(torch.cat(outs, dim=1))
+
+		seg_logits = self.decode_head.cls_seg(feats)
+		### 
+
+		# resize to imgsize as in self.predict_by_feat(seg_logits, batch_img_metas)
+		feats = self.decode_head.predict_by_feat(feats, batch_img_metas)
+		seg_logits = self.decode_head.predict_by_feat(seg_logits, batch_img_metas)
+
+		return seg_logits, feats
 
 # ! TODO when use normal init, would cause pseudo label become unaccurate
 @MODELS.register_module()
 class MixVisionTransformerTPT(MixVisionTransformer):
+	""" Modifications: add TPT token to original model
+		tpt_cfg:
+			num_tokens
+			weight_init_type
+		## make token_prompt parameters - len first (num_tokens, 1, embed_dims)
+		if int, then use the same number of tokens for all layers
+		elif float, then use the same percentage of tokens for all layers
+		elif list
+			assert len(list) == len(layers)
+			assert does not contains float or int at the same time (0 does not count)
+			e.g. [0,0,10,0],[10,0,0,0], [0.1,0,0,0]
+			ps. 0 means no token
+	"""
 	def __init__(self,
 				 in_channels=3,
 				 embed_dims=64,
@@ -211,6 +735,96 @@ class MixVisionTransformerTPT(MixVisionTransformer):
 		return identity + model.dropout_layer(out)
 
 
+# utils
+
+class SegValueTrans:
+	"""
+	turn img size value to seg for crop
+	"""
+	def __init__(self, img_size, seg_size):
+		self.img_size = img_size  # (h, w)
+		self.seg_size = seg_size  # (h, w)
+
+	def trans(self, v, type='w'):
+		"""
+		type:
+			w: width
+			h: height
+			x: x pos
+			y: y pos
+		"""
+		if type == 'h':
+			return int(v * (self.seg_size[0] / self.img_size[0]))
+		elif type == 'w':
+			return int(v * (self.seg_size[1] / self.img_size[1]))
+		elif type == 'y':
+			# Assuming y pos translation maintains the same ratio
+			return int(v * (self.seg_size[0] / self.img_size[0]))
+		elif type == 'x':
+			# Assuming x pos translation maintains the same ratio
+			return int(v * (self.seg_size[1] / self.img_size[1]))
+		else:
+			raise ValueError("Invalid type provided.")
+
+class SegMasker:
+	"""
+	TODO improve buffer size
+	Mask out low pseudo-labels in seg
+	Detail: 
+		maintain a buffer of confidence of pixels for each class,
+		for each seg, set pixels to 255 if its confidence is not 
+		in top-p percent.
+		# TODO each img should have some weight
+		# TODO if buffer is to long, half it by only keep the even index'
+		# TODO for cases where no class in buffer
+	"""
+	def __init__(self, use_history):
+		self.buffer = {}
+		self.use_history = use_history
+
+	def add_to_buffer(self, seg_metric, seg_pred):
+		""" 
+		seg_conf: (H, W) with each pixel value as confidence (0-1)
+		seg_pred: (H, W) with each pixel value as predicted class
+		save confidence of each pixel for each class
+		TODO here, we hope the buffer can be running, so that the new conf would be used
+			but if we use fixed size for each class, then the buffer would never be updated for rare class
+			if use time as indication, the rare class would be updated too frequently
+		"""
+		SIZE_RATIO = 500
+		for cls in seg_pred.unique():
+			if cls.item() == 255:  # Skip the reserved value
+				continue
+			if cls.item() not in self.buffer:
+				self.buffer[cls.item()] = []
+			# Get confidences for pixels where the prediction matches the current class
+			cls_confs = seg_metric[seg_pred == cls].flatten().tolist()
+			### TODO partial
+			while len(cls_confs) > 1000: cls_confs = cls_confs[::2]
+			self.buffer[cls.item()].extend(cls_confs)
+			while len(self.buffer[cls.item()]) > 1000*SIZE_RATIO: 
+				self.buffer[cls.item()] = self.buffer[cls.item()][::2]
+		
+	def cal_mask(self, seg_metric, seg_pred, top_p):
+		"""
+		return a mask shape as seg with True for high confidence,
+		cal top_p percent
+		"""
+		mask = torch.zeros_like(seg_metric, dtype=torch.bool)
+		for cls, confs in self.buffer.items():
+			if not confs:  # if no confidences stored for this class, skip
+				continue
+			if self.use_history:
+				all_confs = torch.tensor(confs).flatten()
+			else:
+				all_confs = seg_metric[seg_pred == cls].flatten()
+			threshold = all_confs.quantile(1-top_p)  # Notice that it's now `top_p` directly as we're marking high confidences
+			mask[(seg_pred == cls) & (seg_metric >= threshold)] = True  # Only change the mask where condition is met
+		return mask
+
+
+# main
+
 @HOOKS.register_module()
 class TTDAHook(Hook):
 	"""Check invalid loss hook.
@@ -331,65 +945,12 @@ class TTDAHook(Hook):
 			self.model_ori = deepcopy(runner.model)
 		batch_pseudoed_model = self.model_ori if self.kwargs.pseudo_use_ori \
 			else runner.model
-		batch_pseudoed = batch_pseudoed_model.test_step(batch)
+		batch_pseudoed = batch_pseudoed_model.test_step_plus(batch)
 
-		# top-p mask
-		# TODO each img should have some weight
-		# TODO if buffer is to long, half it by only keep the even index'
-		# TODO for cases where no class in buffer
-
-		class SegMasker:
-			""" 
-			Mask out low confidence pseudo-labels in seg
-			Detail: 
-				maintain a buffer of confidence of pixels for each class,
-				for each seg, set pixels to 255 if its confidence is not 
-				in top-p percent.
-			"""
-			def __init__(self):
-				self.buffer = {}
-
-			def add_to_buffer(self, seg_conf, seg_pred):
-				""" 
-				seg_conf: (H, W) with each pixel value as confidence (0-1)
-				seg_pred: (H, W) with each pixel value as predicted class
-				save confidence of each pixel for each class
-				TODO here, we hope the buffer can be running, so that the new conf would be used
-					but if we use fixed size for each class, then the buffer would never be updated for rare class
-					if use time as indication, the rare class would be updated too frequently
-				"""
-				SIZE_RATIO = 500
-				for cls in seg_pred.unique():
-					if cls.item() == 255:  # Skip the reserved value
-						continue
-					if cls.item() not in self.buffer:
-						self.buffer[cls.item()] = []
-					# Get confidences for pixels where the prediction matches the current class
-					cls_confs = seg_conf[seg_pred == cls].flatten().tolist()
-					### TODO partial
-					while len(cls_confs) > 1000: cls_confs = cls_confs[::2]
-					self.buffer[cls.item()].extend(cls_confs)
-					while len(self.buffer[cls.item()]) > 1000*SIZE_RATIO: 
-						self.buffer[cls.item()] = self.buffer[cls.item()][::2]
-				
-			def cal_mask(self, seg_conf, seg_pred, top_p):
-				"""
-				return a mask shape as seg with True for high confidence,
-				cal top_p percent
-				"""
-				mask = torch.zeros_like(seg_conf, dtype=torch.bool)
-				for cls, confs in self.buffer.items():
-					if not confs:  # if no confidences stored for this class, skip
-						continue
-					all_confs = torch.tensor(confs).flatten()
-					threshold = all_confs.quantile(1-top_p)  # Notice that it's now `top_p` directly as we're marking high confidences
-					mask[(seg_pred == cls) & (seg_conf >= threshold)] = True  # Only change the mask where condition is met
-				return mask
-		
 		if self.kwargs.high_conf_mask.turn_on:
 			if batch_idx == 0: 
 				assert not hasattr(self, "seg_masker"), "seg_masker should not be init twice"
-				self.seg_masker = SegMasker()
+				self.seg_masker = SegMasker(use_history=self.kwargs.high_conf_mask.use_history)
 			seg_conf = F.softmax(batch_pseudoed[0].seg_logits.data, dim=0).max(0)[0]
 			self.seg_masker.add_to_buffer(seg_conf, batch_pseudoed[0].pred_sem_seg.data[0])
 			hign_conf_mask = self.seg_masker.cal_mask(
@@ -403,41 +964,8 @@ class TTDAHook(Hook):
 			batch_pseudoed[0].pred_sem_seg.data = sem_seg_.unsqueeze(0)
 
 		# set data_batch_for_adapt for train
-
-		###
-		# def slide_crop(data_batch): return data_batch with {inputs: [n * (crop_size], ...} with predict set as gt
-		class SegValueTrans:
-			"""
-			turn img size value to seg for crop
-			"""
-			def __init__(self, img_size, seg_size):
-				self.img_size = img_size  # (h, w)
-				self.seg_size = seg_size  # (h, w)
-
-			def trans(self, v, type='w'):
-				"""
-				type:
-					w: width
-					h: height
-					x: x pos
-					y: y pos
-				"""
-				if type == 'h':
-					return int(v * (self.seg_size[0] / self.img_size[0]))
-				elif type == 'w':
-					return int(v * (self.seg_size[1] / self.img_size[1]))
-				elif type == 'y':
-					# Assuming y pos translation maintains the same ratio
-					return int(v * (self.seg_size[0] / self.img_size[0]))
-				elif type == 'x':
-					# Assuming x pos translation maintains the same ratio
-					return int(v * (self.seg_size[1] / self.img_size[1]))
-				else:
-					raise ValueError("Invalid type provided.")
-		
 		batch_pseudoed_slided = {"inputs": [], "data_samples": []}
 		batch_slided = {"inputs": [], "data_samples": []}
-		# assert ori shape == seg shape
 		st = SegValueTrans(data_samples[0].img_shape, data_samples[0].ori_shape)
 		data_samples_tp = deepcopy(data_samples[0])
 		h_stride, w_stride = runner.model.test_cfg.stride
@@ -535,13 +1063,15 @@ class TTDAHook(Hook):
 	### hooks
 	
 	def before_run(self, runner) -> None:
-		if not self.kwargs.turn_on_adapt: return
-		# if self.mode == "test":
-		runner.logger.info('fake train init')
-		self.fake_train_init(runner)
-		runner.logger.info('fake train init done')
-		# else:
-		#     raise ValueError(f"mode {self.mode} not supported, only 'test' for TTDA ")
+		# adapt init (e.g. optimizer)
+		if self.kwargs.turn_on_adapt:
+			runner.logger.info('fake train init')
+			self.fake_train_init(runner)
+			runner.logger.info('fake train init done')
+		
+		# predict mode switch
+		if self.kwargs.proto_predict.turn_on:
+			runner.model.test_step = partial(runner.model.test_step_proto_predict, cfg=self.kwargs.proto_predict)
 
 	def before_test_iter(self,
 						 runner: Runner,
@@ -572,4 +1102,31 @@ class TTDAHook(Hook):
 		#     "test_step/"+k: v for k, v in metrics.items()
 		# })
 		# runner.logger.info(f"test iter {batch_idx} done, metrics: {metrics}")
+		# draw train sample
+		# if self.every_n_inner_iters(batch_idx, self.kwargs.adapt_img_vis_freq_test):
+		# 	for i, output in enumerate(outputs):
+		# 		# img_path = output.img_path
+		# 		# img_bytes = fileio.get(
+		# 		# 	img_path, backend_args=None) # runner.backend_args?
+		# 		# img = mmcv.imfrombytes(img_bytes, channel_order='rgb')
+		# 		size_ = output.gt_sem_seg.shape # (1024, 1024) # ! note w,h order
+		# 		img = data_batch["inputs"][i] # tensor (3, H, W)
+		# 		# interpolate to same size_
+		# 		# TODO
+
+		# 		img = img.float()
+		# 		img = F.interpolate(img.unsqueeze(0), size=(size_[0], size_[1]), mode='bilinear', align_corners=True)
+		# 		img = (img).byte()
+		# 		img = img.squeeze(0).cpu().numpy().transpose(1, 2, 0)
+
+		# 		if img.shape[-1] == 3:
+		# 			img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+		# 		runner.visualizer.add_datasample(
+		# 			f"adapt/test_samples_{i}",
+		# 			img,
+		# 			data_sample=output,
+		# 			show=False,
+		# 			step=runner.iter,
+		# 			draw_pred=True
+		# 			)
 		pass

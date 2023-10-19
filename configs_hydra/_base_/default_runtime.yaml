@@ -22,5 +22,6 @@ visualizer:
   - init_kwargs:
       mode: ${wandb.mode}
       project: ${task_name}
+      entity: ${oc.env:WANDB_ENTITY}
       tags: ${tags}
     type: WandbVisBackend

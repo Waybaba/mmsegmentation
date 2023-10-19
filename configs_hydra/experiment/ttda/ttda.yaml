@@ -3,13 +3,24 @@
 ttda_hook: 
   type: TTDAHook
   turn_on_adapt: true # for test source-only
-  adapt_img_vis_freq: ???
+  adapt_img_vis_freq: ??? # for adapt, can see the proto for learning
   use_pseudo_label: ???
   pseudo_use_ori: true # use freezed source label for pseudo label
   slide_adapt: ???
   high_conf_mask:
-    turn_on: true
+    turn_on: ???
+    use_history: true
     top_p: 0.3 # only keep top_p pixels, others set to 255
+  proto_predict:
+    turn_on: ???
+    rho: 1.0 # for updating prototype, history_proto = (1-rho) * history_proto + rho * proto_this_img
+    lambda_: count # for using prototype, final_proto = lambda_ * history_proto + (1 - lambda_) * proto_this_img. if "count", use count as lambda
+    proto_mask_top_p: 0.9 # 
+    proto_mask_metric: "entropy" # confidence, entropy, ground_truth, none
+    proto_mask_use_history: true # whether top_p threshold is based on all history metric or only this img
+
+
+
 
 optim_wrapper:
   paramwise_cfg:
@@ -42,6 +53,7 @@ load_from: ??? # ! load from mmseg model
 
 ### TPT
 model:
+  type: EncoderDecoderWrapper
   backbone:
     type: MixVisionTransformerTPT
     tpt_cfg:
