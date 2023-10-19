@@ -13,8 +13,8 @@ ttda_hook:
     top_p: 0.3 # only keep top_p pixels, others set to 255
   proto_predict:
     turn_on: ???
-    rho: 1.0 # for updating prototype, history_proto = (1-rho) * history_proto + rho * proto_this_img
-    lambda_: count # for using prototype, final_proto = lambda_ * history_proto + (1 - lambda_) * proto_this_img. if "count", use count as lambda
+    rho: count # for updating prototype, history_proto = (1-rho) * history_proto + rho * proto_this_img
+    lambda_: 0.0 # for using prototype, final_proto = lambda_ * history_proto + (1 - lambda_) * proto_this_img. if "count", use count as lambda
     norm_feats: true
     proto_mask_top_p: 0.9 # 
     proto_mask_metric: "entropy" # confidence, entropy, ground_truth, none
