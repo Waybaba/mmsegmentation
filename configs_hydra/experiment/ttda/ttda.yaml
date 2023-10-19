@@ -18,7 +18,7 @@ ttda_hook:
     norm_feats: true
     proto_mask_top_p: 0.9 # 
     proto_mask_metric: "entropy" # confidence, entropy, ground_truth, none
-    proto_mask_use_history: true # whether top_p threshold is based on all history metric or only this img
+    proto_mask_use_history: false # whether top_p threshold is based on all history metric or only this img
 
 
 

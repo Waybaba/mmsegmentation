@@ -822,6 +822,7 @@ class SegMasker:
 				all_confs = torch.tensor(confs).flatten()
 			else:
 				all_confs = seg_metric[seg_pred == cls].flatten()
+			if all_confs.numel() == 0: continue
 			threshold = all_confs.quantile(1-top_p)  # Notice that it's now `top_p` directly as we're marking high confidences
 			mask[(seg_pred == cls) & (seg_metric >= threshold)] = True  # Only change the mask where condition is met
 		return mask
