@@ -26,7 +26,40 @@ from mmengine.registry import MODELS
 from mmseg.models.backbones import MixVisionTransformer
 from mmseg.models import EncoderDecoder
 import torch.utils.checkpoint as cp
+import math
+# TODO check model.train in ttda mode
+# TODO check multi head ! I only have one head
+def _scaled_dot_product_attention_llama_adapter(
+	q,
+	k,
+	v,
+	attn_mask = None,
+	dropout_p = 0.0,
+	tpt_num = None,
+	gate = None,
+):
+	B, Nt, E = q.shape
+	q = q / math.sqrt(E)
+	# (B, Nt, E) x (B, E, Ns) -> (B, Nt, Ns)
+	if attn_mask is not None:
+		attn = torch.baddbmm(attn_mask, q, k.transpose(-2, -1))
+	else:
+		attn = torch.bmm(q, k.transpose(-2, -1))
 
+	### @waybaba 
+	# attn = F.softmax(attn, dim=-1)
+	attn_ori = attn[:, :, :-tpt_num] # [B, num_tokens_out, num_tokens_in]
+	attn_extra = attn[:, :, -tpt_num:]
+	attn_ori = torch.softmax(attn_ori, dim=-1)
+	attn_extra = torch.softmax(attn_extra, dim=-1) * torch.tanh(gate)
+	attn = torch.cat([attn_ori, attn_extra], dim=-1)
+
+	### @waybaba
+	if dropout_p > 0.0:
+		attn = F.dropout(attn, p=dropout_p)
+	# (B, Nt, Ns) x (B, Ns, E) -> (B, Nt, E)
+	output = torch.bmm(attn, v)
+	return output, attn
 
 @MODELS.register_module()
 class EncoderDecoderWrapper(EncoderDecoder):
@@ -601,7 +634,6 @@ class MixVisionTransformerTPT(MixVisionTransformer):
 			with_cp=with_cp)
 		if tpt_cfg is not None:
 			self.tpt_cfg = tpt_cfg
-			
 			self.token_prompts = []
 			### make token_prompt parameters - len first (num_tokens, 1, embed_dims)
 			# if int, then use the same number of tokens for all layers
@@ -653,6 +685,8 @@ class MixVisionTransformerTPT(MixVisionTransformer):
 				if self.token_prompts[i] is not None:
 					self.register_parameter(f"token_prompt_q_{i}", self.token_prompts[i]["q"])
 					self.register_parameter(f"token_prompt_kv_{i}", self.token_prompts[i]["kv"])
+			tpt_gates = nn.Parameter(torch.zeros(len(self.layers)))
+			self.register_parameter("tpt_gates", tpt_gates)
 	
 	def forward(self, x):
 		outs = []
@@ -661,7 +695,7 @@ class MixVisionTransformerTPT(MixVisionTransformer):
 			x, hw_shape = layer[0](x)
 			for block in layer[1]:
 				# x = block(x, hw_shape) # ! origin from mmseg
-				x = self.TEL_forward(block, x, hw_shape, self.token_prompts[i])
+				x = self.TEL_forward(block, x, hw_shape, self.token_prompts[i], self.tpt_gates[i])
 			x = layer[2](x)
 			x = nlc_to_nchw(x, hw_shape)
 			if i in self.out_indices:
@@ -669,11 +703,11 @@ class MixVisionTransformerTPT(MixVisionTransformer):
 
 		return outs	
 
-	def TEL_forward(self, model, x, hw_shape, token_prompt=None):
+	def TEL_forward(self, model, x, hw_shape, token_prompt=None, gate=None):
 
 		def _inner_forward(x):
 			# x = model.attn(model.norm1(x), hw_shape, identity=x)
-			x = self.EMHA_forward(model.attn, model.norm1(x), hw_shape, identity=x, token_prompt=token_prompt)
+			x = self.EMHA_forward(model.attn, model.norm1(x), hw_shape, identity=x, token_prompt=token_prompt, gate=gate)
 			# x = model.ffn(model.norm2(x), hw_shape, identity=x)
 			x = self.MixFFN_forward(model.ffn, model.norm2(x), hw_shape, identity=x, token_prompt=token_prompt)
 			return x
@@ -684,7 +718,7 @@ class MixVisionTransformerTPT(MixVisionTransformer):
 			x = _inner_forward(x)
 		return x
 
-	def EMHA_forward(self, model, x, hw_shape, identity=None, token_prompt=None):
+	def EMHA_forward(self, model, x, hw_shape, identity=None, token_prompt=None, gate=None):
 		x_q = x
 		if model.sr_ratio > 1:
 			x_kv = nlc_to_nchw(x, hw_shape)
@@ -717,7 +751,80 @@ class MixVisionTransformerTPT(MixVisionTransformer):
 			token_prompt_kv = token_prompt["kv"].expand(-1, x_kv.shape[1], -1)
 			x_kv = torch.cat([x_kv, token_prompt_kv], dim=0)
 		##### ! token prompt - end
-		out = model.attn(query=x_q, key=x_kv, value=x_kv)[0]
+		# out = model.attn(query=x_q, key=x_kv, value=x_kv)[0] # replace to ->
+		# out, _ = F.multi_head_attention_forward(
+		# 				x_q, x_kv, x_kv, model.attn.embed_dim, model.attn.num_heads,
+		# 				model.attn.in_proj_weight, model.attn.in_proj_bias,
+		# 				None, None, model.attn.add_zero_attn,
+		# 				model.attn.dropout, model.attn.out_proj.weight, model.attn.out_proj.bias,
+		# 				training=model.attn.training) # ! training?
+		# def multi_head_attention_forward(
+		#     query: Tensor,
+		#     key: Tensor,
+		#     value: Tensor,
+		#     embed_dim_to_check: int,
+		#     num_heads: int,
+		#     in_proj_weight: Optional[Tensor],
+		#     in_proj_bias: Optional[Tensor],
+		#     bias_k: Optional[Tensor],
+		#     bias_v: Optional[Tensor],
+		#     add_zero_attn: bool,
+		#     dropout_p: float,
+		#     out_proj_weight: Tensor,
+		#     out_proj_bias: Optional[Tensor],
+		#     training: bool = True,
+		#     key_padding_mask: Optional[Tensor] = None,
+		#     need_weights: bool = True,
+		#     attn_mask: Optional[Tensor] = None,
+		#     use_separate_proj_weight: bool = False,
+		#     q_proj_weight: Optional[Tensor] = None,
+		#     k_proj_weight: Optional[Tensor] = None,
+		#     v_proj_weight: Optional[Tensor] = None,
+		#     static_k: Optional[Tensor] = None,
+		#     static_v: Optional[Tensor] = None,
+		#     average_attn_weights: bool = True,
+		# ) -> Tuple[Tensor, Optional[Tensor]]:
+		num_heads = model.attn.num_heads
+		embed_dim = model.attn.embed_dim
+		query, key, value = x_q, x_kv, x_kv
+		in_proj_weight, in_proj_bias = model.attn.in_proj_weight, model.attn.in_proj_bias
+		bias_k, bias_v = model.attn.bias_k, model.attn.bias_v
+		add_zero_attn = model.attn.add_zero_attn
+		out_proj_weight, out_proj_bias = model.attn.out_proj.weight, model.attn.out_proj.bias
+		training = model.attn.training
+		dropout_p = model.attn.dropout
+		if not model.training:
+			dropout_p = 0.0
+		
+		attn_mask = None
+
+		tgt_len, bsz, embed_dim = query.shape
+		src_len, _, _ = key.shape
+		if isinstance(embed_dim, torch.Tensor):
+			# embed_dim can be a tensor when JIT tracing
+			head_dim = embed_dim.div(num_heads, rounding_mode='trunc')
+		else:
+			head_dim = embed_dim // num_heads
+		assert head_dim * num_heads == embed_dim, f"embed_dim {embed_dim} not divisible by num_heads {num_heads}"
+		q, k, v = F._in_projection_packed(query, key, value, in_proj_weight, in_proj_bias)
+		q = q.contiguous().view(tgt_len, bsz * num_heads, head_dim).transpose(0, 1)
+		k = k.contiguous().view(k.shape[0], bsz * num_heads, head_dim).transpose(0, 1)
+		v = v.contiguous().view(v.shape[0], bsz * num_heads, head_dim).transpose(0, 1)
+		src_len = k.size(1)
+		attn_output, attn_output_weights = _scaled_dot_product_attention_llama_adapter(
+			q, k, v, attn_mask, 
+			tpt_num=token_prompt_kv.shape[0],
+			gate=gate, # TODO !
+		)
+		attn_output = attn_output.transpose(0, 1).contiguous().view(tgt_len * bsz, embed_dim)
+		attn_output = F.linear(attn_output, out_proj_weight, out_proj_bias)
+		attn_output = attn_output.view(tgt_len, bsz, attn_output.size(1))
+		attn_output_weights = attn_output_weights.view(bsz, num_heads, tgt_len, src_len)
+		attn_output_weights = attn_output_weights.sum(dim=1) / num_heads
+		attn_output, attn_output_weights
+		out = attn_output
+
+
 		##### ! token prompt - start
 		# remove token prompt from output
 		if token_prompt is not None:

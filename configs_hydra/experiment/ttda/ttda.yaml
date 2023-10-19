@@ -34,6 +34,8 @@ optim_wrapper:
         lr_mult: ${norm_lr_mult} # ! how to decide order?
       token_prompt:
         lr_mult: 1.0
+      tpt_gates: 
+        lr_mult: 10.0
 norm_lr_mult: 1.0
 
 custom_hooks:
@@ -58,9 +60,9 @@ model:
   backbone:
     type: MixVisionTransformerTPT
     tpt_cfg:
-      num_tokens: 1
-      weight_init_type: zero
-
+      num_tokens: 3
+      weight_init_type: normal # zero, normal, kv_normal, q_normal
+      mode: llama # llama, vpt # TODO
 # model:
 #   test_cfg:
 #     mode: slide
