@@ -293,8 +293,12 @@ class EncoderDecoderWrapper(EncoderDecoder):
 			self.protos_classifier = ProtoClassifier(cfg)
 		for i, d in enumerate(res):
 			# TODO add confidence threshold
-			self.protos_classifier.add_sample(res[i].feats.data, res[i].seg_logits.data, res[i].pred_sem_seg.data)
-			pred = self.protos_classifier.predict(res[i].feats.data)
+			feats_data = res[i].feats.data
+			if cfg.norm_feats: # (Ch, num)
+				# norm to make each vector has norm 1, but keep the direction
+				feats_data = F.normalize(feats_data, dim=0)
+			self.protos_classifier.add_sample(feats_data, res[i].seg_logits.data, res[i].pred_sem_seg.data)
+			pred = self.protos_classifier.predict(feats_data)
 			res[i].pred_sem_seg.data = pred
 		return res
 
