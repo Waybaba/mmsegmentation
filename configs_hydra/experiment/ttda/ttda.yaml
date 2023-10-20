@@ -29,12 +29,12 @@ ttda_hook:
 optim_wrapper:
   paramwise_cfg:
     custom_keys:
+      .norm: # ! since we can not have . in name
+        lr_mult: ${norm_lr_mult} # ! how to decide order?
       head:
         lr_mult: 0.0
       back:
         lr_mult: 0.0 # does not train backbone
-      .norm: # ! since we can not have . in name
-        lr_mult: ${norm_lr_mult} # ! how to decide order?
       token_prompt:
         lr_mult: 1.0
       tpt_gates: 
