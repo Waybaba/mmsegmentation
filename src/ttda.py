@@ -46,14 +46,16 @@ def _scaled_dot_product_attention_llama_adapter(
 	else:
 		attn = torch.bmm(q, k.transpose(-2, -1))
 
-	### @waybaba 
-	# attn = F.softmax(attn, dim=-1)
-	attn_ori = attn[:, :, :-tpt_num] # [B, num_tokens_out, num_tokens_in]
-	attn_extra = attn[:, :, -tpt_num:]
-	attn_ori = torch.softmax(attn_ori, dim=-1)
-	attn_extra = torch.softmax(attn_extra, dim=-1) * torch.tanh(gate)
-	attn = torch.cat([attn_ori, attn_extra], dim=-1)
-
+	### @waybaba
+	if tpt_num is not None:
+		# attn = F.softmax(attn, dim=-1)
+		attn_ori = attn[:, :, :-tpt_num] # [B, num_tokens_out, num_tokens_in]
+		attn_extra = attn[:, :, -tpt_num:]
+		attn_ori = torch.softmax(attn_ori, dim=-1)
+		attn_extra = torch.softmax(attn_extra, dim=-1) * torch.tanh(gate)
+		attn = torch.cat([attn_ori, attn_extra], dim=-1)
+	else:
+		attn = F.softmax(attn, dim=-1)
 	### @waybaba
 	if dropout_p > 0.0:
 		attn = F.dropout(attn, p=dropout_p)
@@ -743,6 +745,7 @@ class MixVisionTransformerTPT(MixVisionTransformer):
 		##### ! token prompt - start
 		# add token prompt
 		# x_q,x_kv (len, batch, dim)  token_prompt (token_num, 1, dim)
+		tpt_num = None
 		if token_prompt is not None:
 			token_prompt["q"] = token_prompt["q"].to(x_q.device)
 			token_prompt_q = token_prompt["q"].expand(-1, x_q.shape[1], -1)
@@ -750,6 +753,7 @@ class MixVisionTransformerTPT(MixVisionTransformer):
 			token_prompt["kv"] = token_prompt["kv"].to(x_kv.device)
 			token_prompt_kv = token_prompt["kv"].expand(-1, x_kv.shape[1], -1)
 			x_kv = torch.cat([x_kv, token_prompt_kv], dim=0)
+			tpt_num = token_prompt_kv.shape[0]
 		##### ! token prompt - end
 		# out = model.attn(query=x_q, key=x_kv, value=x_kv)[0] # replace to ->
 		# out, _ = F.multi_head_attention_forward(
@@ -813,7 +817,7 @@ class MixVisionTransformerTPT(MixVisionTransformer):
 		src_len = k.size(1)
 		attn_output, attn_output_weights = _scaled_dot_product_attention_llama_adapter(
 			q, k, v, attn_mask, 
-			tpt_num=token_prompt_kv.shape[0],
+			tpt_num=tpt_num,
 			gate=gate, # TODO !
 		)
 		attn_output = attn_output.transpose(0, 1).contiguous().view(tgt_len * bsz, embed_dim)
@@ -1050,11 +1054,16 @@ class TTDAHook(Hook):
 		slide_adapt = self.kwargs.slide_adapt
 		assert len(batch["inputs"]) == 1, "only support batch_size=1"
 		inputs, data_samples = batch["inputs"], batch["data_samples"]
-
-		# inference label
 		if not hasattr(self, "model_ori"): # source model for pseudo
 			assert batch_idx == 0, "model_ori should be init only once"
 			self.model_ori = deepcopy(runner.model)
+		if self.kwargs.ema.turn_on:
+			if not hasattr(self, "model_ema"): # target model for pseudo
+				self.model_ema = deepcopy(runner.model)
+			runner.model = self.model_ema
+
+		# inference label
+		
 		batch_pseudoed_model = self.model_ori if self.kwargs.pseudo_use_ori \
 			else runner.model
 		batch_pseudoed = batch_pseudoed_model.test_step_plus(batch)
@@ -1137,6 +1146,13 @@ class TTDAHook(Hook):
 				losses = model._run_forward(data_batch_for_adapt, mode='loss')  # type: ignore
 			parsed_losses, log_vars = model.parse_losses(losses)  # type: ignore
 			optim_wrapper.update_params(parsed_losses)
+
+		# update ema 
+		if self.kwargs.ema.turn_on:
+			# to_update: self.model_ema, target: runner.model
+			# ratio: self.kwargs.ema.rho
+			for ema_param, param in zip(self.model_ema.parameters(), runner.model.parameters()):
+				ema_param.data = ema_param.data * (1. - self.kwargs.ema.rho) + param.data * self.kwargs.ema.rho
 
 		# draw train sample
 		if self.every_n_inner_iters(batch_idx, self.kwargs.adapt_img_vis_freq):
