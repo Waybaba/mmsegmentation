@@ -63,9 +63,12 @@ model:
   backbone:
     type: MixVisionTransformerTPT
     tpt_cfg:
+      turn_on: true
       num_tokens: 3
       weight_init_type: normal # zero, normal, kv_normal, q_normal
       mode: llama # llama, vpt # TODO
+    vpt_cfg:
+      turn_on: false
 # model:
 #   test_cfg:
 #     mode: slide

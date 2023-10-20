@@ -628,7 +628,8 @@ class MixVisionTransformerTPT(MixVisionTransformer):
 				 pretrained=None,
 				 init_cfg=None,
 				 with_cp=False,
-				 tpt_cfg=None
+				 tpt_cfg=None,
+				 vpt_cfg=None,
 				 ):
 		# super().__init__(init_cfg=init_cfg)
 		super().__init__(
@@ -651,7 +652,12 @@ class MixVisionTransformerTPT(MixVisionTransformer):
 			pretrained=pretrained,
 			init_cfg=init_cfg,
 			with_cp=with_cp)
-		if tpt_cfg is not None:
+		# vpt and tpt should not be used at the same time but should be set
+		assert vpt_cfg is not None, "vpt_cfg should not be None"
+		assert tpt_cfg is not None, "tpt_cfg should not be None"
+		assert not (vpt_cfg.turn_on and tpt_cfg.turn_on), "vpt and tpt should not be used at the same time"
+		
+		if tpt_cfg.turn_on:
 			self.tpt_cfg = tpt_cfg
 			self.token_prompts = []
 			### make token_prompt parameters - len first (num_tokens, 1, embed_dims)
@@ -706,7 +712,10 @@ class MixVisionTransformerTPT(MixVisionTransformer):
 					self.register_parameter(f"token_prompt_kv_{i}", self.token_prompts[i]["kv"])
 			tpt_gates = nn.Parameter(torch.zeros(len(self.layers)))
 			self.register_parameter("tpt_gates", tpt_gates)
-	
+		
+		if vpt_cfg.turn_on:
+			print(1)
+
 	def forward(self, x):
 		outs = []
 
@@ -867,7 +876,6 @@ class MixVisionTransformerTPT(MixVisionTransformer):
 		return identity + model.dropout_layer(out)
 
 
-# utils
 
 class SegValueTrans:
 	"""
