@@ -1,0 +1,18 @@
+# @package _global_
+
+optim_wrapper:
+  # _delete_: true
+  optimizer:
+    lr: 6.0e-05
+    type: SGD
+    weight_decay: 1e-4
+    momentum: 0.9
+  paramwise_cfg:
+    custom_keys:
+      head:
+        lr_mult: 10.0
+      norm:
+        decay_mult: 0.0
+      pos_block:
+        decay_mult: 0.0
+  type: OptimWrapper

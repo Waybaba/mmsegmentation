@@ -21,8 +21,8 @@ ttda_hook:
     proto_mask_metric: "entropy" # confidence, entropy, ground_truth, none
     proto_mask_use_history: false # whether top_p threshold is based on all history metric or only this img
   ema:
-    turn_on: ???
-    rho: 0.5 # how much would ema be updated each step
+    turn_on: false
+    rho: 0.3 # how much would ema be updated each step
 
 
 
