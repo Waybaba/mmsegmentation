@@ -27,6 +27,23 @@ from mmseg.models.backbones import MixVisionTransformer
 from mmseg.models import EncoderDecoder
 import torch.utils.checkpoint as cp
 import math
+
+def param_migrate(base, tgt, rho):
+	"""
+	rho = 1 means copy all params from src to tgt
+	rho = 0 means copy nothing
+	others, final = (1-rho) * base + rho * tgt
+	"""
+	# check all keys the same
+	for name, param in base.named_parameters():
+		assert name in tgt.state_dict().keys(), f"{name} not in tgt"
+	for name, param in tgt.named_parameters():
+		base.state_dict()[name].data.copy_(
+			(1-rho) * base.state_dict()[name].data \
+				+ rho * param.data
+			)
+	return base
+
 # TODO check model.train in ttda mode
 # TODO check multi head ! I only have one head
 def _scaled_dot_product_attention_llama_adapter(
@@ -1060,9 +1077,13 @@ class TTDAHook(Hook):
 		if self.kwargs.ema.turn_on:
 			if not hasattr(self, "model_ema"): # target model for pseudo
 				self.model_ema = deepcopy(runner.model)
-			# set param as ema
-			for param_ema, param in zip(self.model_ema.parameters(), runner.model.parameters()):
-				param.data = param_ema.data
+				for param in self.model_ema.parameters():
+					param.detach_()
+					param.requires_grad = False
+			# back to ema
+			for name, param in runner.model.named_parameters():
+				# runner.model.state_dict()[name].data.copy_(self.model_ema.state_dict()[name].data)
+				runner.model = param_migrate(runner.model, self.model_ema, 1.0)
 
 		# inference label
 		
@@ -1151,10 +1172,7 @@ class TTDAHook(Hook):
 
 		# update ema 
 		if self.kwargs.ema.turn_on:
-			# to_update: self.model_ema, target: runner.model
-			# ratio: self.kwargs.ema.rho
-			for ema_param, param in zip(self.model_ema.parameters(), runner.model.parameters()):
-				ema_param.data = ema_param.data * (1. - self.kwargs.ema.rho) + param.data * self.kwargs.ema.rho
+			self.model_ema = param_migrate(self.model_ema, runner.model, self.kwargs.ema.rho)
 
 		# draw train sample
 		if self.every_n_inner_iters(batch_idx, self.kwargs.adapt_img_vis_freq):
