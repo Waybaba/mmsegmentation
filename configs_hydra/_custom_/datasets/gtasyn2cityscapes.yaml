@@ -50,28 +50,52 @@ test_evaluator:
 train_dataloader:
   batch_size: 2
   dataset:
-    data_prefix:
-      img_path: RGB
-      seg_map_path: GT/LABELS
-    data_root: /data/synthia
-    pipeline:
-    - type: LoadImageFromFile
-    - type: LoadAnnotations
-    - keep_ratio: true
-      ratio_range: &id003
-        _args_:
-        - [0.5, 2.0]
-        _target_: builtins.tuple
-      scale: ${gta_scale}
-      type: RandomResize
-    - cat_max_ratio: 0.75
-      crop_size: ${crop_size} # *id002
-      type: RandomCrop
-    - prob: 0.5
-      type: RandomFlip
-    - type: PhotoMetricDistortion
-    - type: PackSegInputs
-    type: SynthiaDataset
+    type: ConcatDataset
+    datasets:
+      - data_prefix:
+          img_path: RGB
+          seg_map_path: GT/LABELS
+        data_root: /data/synthia
+        pipeline:
+        - type: LoadImageFromFile
+        - type: LoadAnnotations
+        - keep_ratio: true
+          ratio_range:
+            _args_:
+            - [0.5, 2.0]
+            _target_: builtins.tuple
+          scale: ${gta_scale}
+          type: RandomResize
+        - cat_max_ratio: 0.75
+          crop_size: ${crop_size} # *id002
+          type: RandomCrop
+        - prob: 0.5
+          type: RandomFlip
+        - type: PhotoMetricDistortion
+        - type: PackSegInputs
+        type: SynthiaDataset
+      - data_prefix:
+          img_path: images
+          seg_map_path: labels
+        data_root: /data/GTA5
+        pipeline:
+        - type: LoadImageFromFile
+        - type: LoadAnnotations
+        - keep_ratio: true
+          ratio_range: 
+            _args_:
+            - [0.5, 2.0]
+            _target_: builtins.tuple
+          scale: ${gta_scale}
+          type: RandomResize
+        - cat_max_ratio: 0.75
+          crop_size: ${crop_size} # *id002
+          type: RandomCrop
+        - prob: 0.5
+          type: RandomFlip
+        - type: PhotoMetricDistortion
+        - type: PackSegInputs
+        type: GTADataset
   num_workers: 2
   persistent_workers: true
   sampler:
