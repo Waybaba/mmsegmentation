@@ -1060,7 +1060,9 @@ class TTDAHook(Hook):
 		if self.kwargs.ema.turn_on:
 			if not hasattr(self, "model_ema"): # target model for pseudo
 				self.model_ema = deepcopy(runner.model)
-			runner.model = self.model_ema
+			# set param as ema
+			for param_ema, param in zip(self.model_ema.parameters(), runner.model.parameters()):
+				param.data = param_ema.data
 
 		# inference label
 		
