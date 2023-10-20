@@ -30,7 +30,7 @@ optim_wrapper:
   paramwise_cfg:
     custom_keys:
       head:
-        lr_mult: 1.0
+        lr_mult: 0.0
       back:
         lr_mult: 0.0 # does not train backbone
       .norm: # ! since we can not have . in name
@@ -40,6 +40,8 @@ optim_wrapper:
       tpt_gates: 
         lr_mult: 1.0
       visual_prompt_module:
+        lr_mult: 1.0
+      fusion_conv:
         lr_mult: 1.0
 norm_lr_mult: 1.0
 
