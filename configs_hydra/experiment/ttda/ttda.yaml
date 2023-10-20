@@ -71,8 +71,8 @@ model:
       mode: llama # llama, vpt # TODO
     vpt_cfg:
       turn_on: true
-      type: padding # "padding" # padding, fixed_patch, random_patch, cnn
-      prompt_size: 1
+      type: cnn # "padding" # padding, fixed_patch, random_patch, cnn
+      prompt_size: 3
       res_add: 1
       weight_init_type: normal # "normal" 
 # model:
