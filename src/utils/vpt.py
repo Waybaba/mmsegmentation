@@ -88,7 +88,13 @@ class CNNPrompter(nn.Module):
         self.psize = args.prompt_size
         self.res_add = args.res_add
         self.weight_init_type = args.weight_init_type # origin or random
-        assert hasattr(self.psize, "__iter__"), "args.prompt_size should be a list"
+        # assert hasattr(self.psize, "__iter__"), "args.prompt_size should be a list"
+        if hasattr(self.psize, "__iter__"):
+            self.psize = self.psize
+        elif isinstance(self.psize, int):
+            self.psize = (self.psize,)
+        else:
+            raise ValueError("args.prompt_size should be a list or int")
         self.layers = nn.ModuleList()
         for l_idx, k_size in enumerate(self.psize):
             # create weight
