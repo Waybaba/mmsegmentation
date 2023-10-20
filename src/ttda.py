@@ -1081,9 +1081,7 @@ class TTDAHook(Hook):
 					param.detach_()
 					param.requires_grad = False
 			# back to ema
-			for name, param in runner.model.named_parameters():
-				# runner.model.state_dict()[name].data.copy_(self.model_ema.state_dict()[name].data)
-				runner.model = param_migrate(runner.model, self.model_ema, 1.0)
+			runner.model = param_migrate(runner.model, self.model_ema, 1.0)
 
 		# inference label
 		

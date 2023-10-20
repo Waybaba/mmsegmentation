@@ -22,7 +22,7 @@ ttda_hook:
     proto_mask_use_history: false # whether top_p threshold is based on all history metric or only this img
   ema:
     turn_on: ???
-    rho: 0.5
+    rho: 0.5 # how much would ema be updated each step
 
 
 
