@@ -18,6 +18,7 @@ from mmengine.model.efficient_conv_bn_eval import \
 import torch.nn.functional as F
 from mmseg.models.utils import PatchEmbed, nchw_to_nlc, nlc_to_nchw, resize
 from functools import partial
+import utils
 
 
 import cv2
@@ -656,9 +657,9 @@ class MixVisionTransformerTPT(MixVisionTransformer):
 		assert vpt_cfg is not None, "vpt_cfg should not be None"
 		assert tpt_cfg is not None, "tpt_cfg should not be None"
 		assert not (vpt_cfg.turn_on and tpt_cfg.turn_on), "vpt and tpt should not be used at the same time"
+		self.tpt_cfg, self.vpt_cfg = tpt_cfg, vpt_cfg
 		
 		if tpt_cfg.turn_on:
-			self.tpt_cfg = tpt_cfg
 			self.token_prompts = []
 			### make token_prompt parameters - len first (num_tokens, 1, embed_dims)
 			# if int, then use the same number of tokens for all layers
@@ -714,16 +715,28 @@ class MixVisionTransformerTPT(MixVisionTransformer):
 			self.register_parameter("tpt_gates", tpt_gates)
 		
 		if vpt_cfg.turn_on:
-			print(1)
+			self.visual_prompt_module = utils.VisutalPrompter(
+				**{k: v  for k, v in vpt_cfg.items() if k not in ["turn_on"]},
+				dynamic_cfg={
+					"image_size": (512,1024)
+				}
+			)
 
 	def forward(self, x):
+		if self.vpt_cfg.turn_on:
+			self.visual_prompt_module(x)
+		
 		outs = []
 
 		for i, layer in enumerate(self.layers):
 			x, hw_shape = layer[0](x)
 			for block in layer[1]:
 				# x = block(x, hw_shape) # ! origin from mmseg
-				x = self.TEL_forward(block, x, hw_shape, self.token_prompts[i], self.tpt_gates[i])
+				x = self.TEL_forward(
+					block, x, hw_shape, 
+					self.token_prompts[i] if self.tpt_cfg.turn_on else None,
+					self.tpt_gates[i] if self.tpt_cfg.turn_on else None
+				)
 			x = layer[2](x)
 			x = nlc_to_nchw(x, hw_shape)
 			if i in self.out_indices:

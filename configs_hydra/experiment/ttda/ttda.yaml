@@ -63,12 +63,16 @@ model:
   backbone:
     type: MixVisionTransformerTPT
     tpt_cfg:
-      turn_on: true
+      turn_on: false
       num_tokens: 3
       weight_init_type: normal # zero, normal, kv_normal, q_normal
       mode: llama # llama, vpt # TODO
     vpt_cfg:
-      turn_on: false
+      turn_on: true
+      type: padding # "padding" # padding, fixed_patch, random_patch, cnn
+      prompt_size: 1
+      res_add: 1
+      weight_init_type: normal # "normal" 
 # model:
 #   test_cfg:
 #     mode: slide
