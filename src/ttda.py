@@ -718,7 +718,7 @@ class MixVisionTransformerTPT(MixVisionTransformer):
 			self.visual_prompt_module = utils.VisutalPrompter(
 				**{k: v  for k, v in vpt_cfg.items() if k not in ["turn_on"]},
 				dynamic_cfg={
-					"image_size": (512,1024)
+					"image_size": (1024,512) # ! dynamic for other dataset
 				}
 			)
 
