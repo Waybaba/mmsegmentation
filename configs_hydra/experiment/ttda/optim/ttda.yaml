@@ -3,20 +3,20 @@
 optim_wrapper:
   # _delete_: true
   ### ! SGD
-  # optimizer:
-  #   lr: 6.0e-05
-  #   type: SGD
-  #   weight_decay: 1e-4
-  #   momentum: 0.9
-  ### ! Adam
   optimizer:
-    betas:
-      _args_:
-      - [0.9, 0.999]
-      _target_: builtins.tuple
     lr: 6.0e-05
-    type: AdamW
-    weight_decay: 0.01
+    type: SGD
+    weight_decay: 1e-4
+    momentum: 0.9
+  ### ! Adam
+  # optimizer:
+  #   betas:
+  #     _args_:
+  #     - [0.9, 0.999]
+  #     _target_: builtins.tuple
+  #   lr: 6.0e-05
+  #   type: AdamW
+  #   weight_decay: 0.01
   paramwise_cfg:
     custom_keys:
       head:
