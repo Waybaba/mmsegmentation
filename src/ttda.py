@@ -30,6 +30,88 @@ from mmseg.models import EncoderDecoder
 import torch.utils.checkpoint as cp
 import math
 
+def automask_consistency_loss(sam_automask, feats, outputs, cfg):
+    """
+    Calculate the consistency of the same color
+        input:
+            sam_automask: (B, w, h)
+                different color is indicated by different int
+            feats: (B, d, w, h)
+    """
+    batch_size = sam_automask.shape[0]
+    loss = 0.0
+
+    pixel_total = feats.shape[2] * feats.shape[3]
+    
+    for b in range(batch_size):
+        # flatten the automask and feats for convenience
+        sam_automask_flat = sam_automask[b].view(-1)
+        feats_flat = feats[b].view(feats.shape[1], -1)
+        outputs_flat = outputs[b].view(outputs.shape[1], -1)
+
+        # get unique segments in the mask
+        segments = torch.unique(sam_automask_flat)
+
+        if cfg.strategy == "min_variance":
+            for segment in segments:
+                # get indices of current segment
+                segment_indices = torch.where(sam_automask_flat == segment)[0]
+
+                # get features of current segment
+                segment_feats = feats_flat[:, segment_indices]
+
+                # calculate variance along the feature dimension
+                segment_variance = torch.var(segment_feats, dim=1, unbiased=False)
+
+                # count number of pixels in the segment
+                pixel_count = segment_indices.numel()
+
+                # add mean of variances to total loss, weighted by inverse of pixel count
+                loss += torch.mean(segment_variance) * (pixel_count / pixel_total)
+
+        elif cfg.strategy == "close_to_confident":
+            """
+                use the top-{confidence_selected_ratio} confident pixel in the segment as the anchor
+                minimize the distance between the anchor and other pixels in the segment
+                outputs_flat: (C, N) which is before softmax
+                # cfg.confidence_type: "confidence" or "entropy"
+                # cfg.confidence_selected_ratio: 0.1
+            """
+            for segment in segments:
+                # get indices of current segment
+                segment_indices = torch.where(sam_automask_flat == segment)[0]
+
+                # get outputs of current segment
+                segment_outputs = outputs_flat[:, segment_indices]
+
+                # get the confidence scores of the segment
+                if cfg.confidence_type == "confidence":
+                    segment_confidence = torch.max(torch.softmax(segment_outputs, dim=0), dim=0)[0]
+                    confidence_threshold = torch.topk(segment_confidence, max(1, int(cfg.confidence_selected_ratio * segment_confidence.shape[0])), largest=True)[0][-1]
+                    anchor_indices = torch.where(segment_confidence >= confidence_threshold)[0]
+                elif cfg.confidence_type == "entropy":
+                    segment_confidence = torch.sum(-torch.softmax(segment_outputs, dim=0) * torch.log(torch.softmax(segment_outputs, dim=0) + 1e-8), dim=0)
+                    confidence_threshold = torch.topk(segment_confidence, max(1, int(cfg.confidence_selected_ratio * segment_confidence.shape[0])), largest=False)[0][-1]
+                    anchor_indices = torch.where(segment_confidence <= confidence_threshold)[0]
+                else:
+                    raise ValueError(f"Unknown confidence type: {cfg.confidence_type}")
+
+                # select the top-{confidence_selected_ratio} confident pixel in the segment as the anchor
+                anchor_feats = segment_outputs[:, anchor_indices]
+                anchor_feats = anchor_feats.mean(dim=1).unsqueeze(1).detach()
+
+                # calculate distance between the anchor and other pixels in the segment
+                distance = torch.norm(segment_outputs[:, :, None] - anchor_feats[:, None, :], dim=0)
+
+                # add mean distance to total loss, weighted by inverse of pixel count
+                pixel_count = segment_indices.numel()
+                loss += torch.mean(distance) * (pixel_count / pixel_total)
+
+        else: raise NotImplementedError
+
+    return loss / batch_size  # Normalize by batch size
+
+
 def param_migrate(base, tgt, rho):
 	"""
 	rho = 1 means copy all params from src to tgt
@@ -1110,7 +1192,7 @@ class TTDAHook(Hook):
 		batch_pseudoed_model = self.model_ori if self.kwargs.pseudo_use_ori \
 			else runner.model
 		batch_pseudoed = batch_pseudoed_model.test_step_plus(batch)
-
+		batch["data_samples"][0].feats = batch_pseudoed[0].feats # TODO for more than 1
 		if self.kwargs.high_conf_mask.turn_on:
 			if batch_idx == 0: 
 				assert not hasattr(self, "seg_masker"), "seg_masker should not be init twice"
@@ -1189,11 +1271,18 @@ class TTDAHook(Hook):
 				if self.kwargs.debug.use_mmseg_pseudo_loss:
 					losses = model._run_forward(data_batch_for_adapt, mode='loss')  # type: ignore
 				else:
-					x = model.extract_feat(data_batch_for_adapt["inputs"])
+					# x = model.extract_feat(data_batch_for_adapt["inputs"])
+					# seg_logits = model.decode_head.forward(x)
+					batch_img_metas = [
+									data_sample.metainfo for data_sample in data_batch_for_adapt["data_samples"]
+								]
+					seg_logits, feats= model.encode_decode_with_feats(
+						data_batch_for_adapt["inputs"], 
+						batch_img_metas,
+					)
 					losses = dict()
 					# loss_decode = model.decode_head.loss(x, data_batch_for_adapt["data_samples"],
 					# 									model.train_cfg)
-					seg_logits = model.decode_head.forward(x)
 					# loss_decode = model.decode_head.loss_by_feat(seg_logits, data_batch_for_adapt["data_samples"])
 					seg_label = model.decode_head._stack_batch_gt(data_batch_for_adapt["data_samples"])
 					seg_logits = resize(
@@ -1227,6 +1316,17 @@ class TTDAHook(Hook):
 						entropy_global = prob.mean()
 						entropy_global = torch.sum(-entropy_global * torch.log(entropy_global), dim=-1).mean()
 						losses["loss_englobal"] = - entropy_global * self.kwargs.divese_loss.ratio
+					# sam loss
+					if self.kwargs.sam_loss.ratio:
+						automask = batch["data_samples"][0].automask
+						losses["loss_sam"] = automask_consistency_loss(
+							automask,
+							feats[0],
+							seg_logits,
+							self.kwargs.sam_loss
+						) * self.kwargs.sam_loss.ratio
+
+
 					losses = add_prefix(losses, 'decode')
 
 				if model.with_auxiliary_head: assert NotImplementedError("see the class function for this branch")
