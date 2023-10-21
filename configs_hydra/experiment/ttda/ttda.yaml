@@ -44,7 +44,7 @@ ttda_hook:
     turn_on: false
     rho: 0.3 # how much would ema be updated each step
   debug:
-    use_mmseg_pseudo_loss: false # whether use mmseg pseudo loss
+    use_mmseg_pseudo_loss: false
 
 
 optim_wrapper:
