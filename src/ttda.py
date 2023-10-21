@@ -1196,7 +1196,7 @@ class TTDAHook(Hook):
 				# loss_decode = model.decode_head.loss_by_feat(seg_logits, data_batch_for_adapt["data_samples"])
 				seg_label = model.decode_head._stack_batch_gt(data_batch_for_adapt["data_samples"])
 				# pseudo label
-				if self.kwargs.pseudo_label_loss:
+				if self.kwargs.pseudo_label_loss.ratio:
 					seg_logits = resize(
 						input=seg_logits,
 						size=seg_label.shape[2:],
@@ -1211,7 +1211,7 @@ class TTDAHook(Hook):
 						ignore_index=model.decode_head.ignore_index) * \
 					self.kwargs.pseudo_label_loss.ratio
 				# entropy
-				if self.kwargs.entropy_loss:
+				if self.kwargs.entropy_loss.ratio:
 					prob = F.softmax(seg_logits, dim=1)
 					entropy = -prob * torch.log(prob)
 					entropy = torch.sum(entropy, dim=1)
@@ -1220,7 +1220,7 @@ class TTDAHook(Hook):
 					entropy = entropy.mean()
 					losses["loss_en"] = entropy * self.kwargs.entropy_loss.ratio
 				# mean entropy
-				if self.kwargs.divese_loss:
+				if self.kwargs.divese_loss.ratio:
 					if self.kwargs.high_conf_mask.turn_on:
 						entropy_global = prob[:,:,hign_conf_mask]
 					entropy_global = prob.mean()
