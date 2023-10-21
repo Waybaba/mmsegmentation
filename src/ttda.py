@@ -1206,8 +1206,18 @@ class TTDAHook(Hook):
                     seg_logits,
                     seg_label,
                     weight=None,
-                    ignore_index=model.decode_head.ignore_index)
+                    ignore_index=model.decode_head.ignore_index) * \
+				self.kwargs.pseudo_label_loss.ratio
+				# entropy
+				prob = F.softmax(seg_logits, dim=1)
+				entropy = torch.sum(-prob * torch.log(prob), dim=1).mean()
+				losses["loss_en"] = entropy * self.kwargs.entropy_loss.ratio
+				# mean entropy
+				entropy_global = prob.mean(dim=-1).mean(dim=-1)
+				entropy_global = torch.sum(-entropy_global * torch.log(entropy_global), dim=-1).mean()
+				losses["loss_englobal"] = - entropy_global * self.kwargs.divese_loss.ratio
 				losses = add_prefix(losses, 'decode')
+
 				if model.with_auxiliary_head: assert NotImplementedError("see the class function for this branch")
 
 			parsed_losses, log_vars = model.parse_losses(losses)  # sum all element with loss in
