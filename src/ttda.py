@@ -19,6 +19,7 @@ import torch.nn.functional as F
 from mmseg.models.utils import PatchEmbed, nchw_to_nlc, nlc_to_nchw, resize
 from functools import partial
 import utils
+from mmseg.utils.misc import add_prefix
 
 
 import cv2
@@ -1185,8 +1186,31 @@ class TTDAHook(Hook):
 			model = runner.model
 			with optim_wrapper.optim_context(model):
 				data_batch_for_adapt = model.data_preprocessor(data_batch_for_adapt, True)
-				losses = model._run_forward(data_batch_for_adapt, mode='loss')  # type: ignore
-			parsed_losses, log_vars = model.parse_losses(losses)  # type: ignore
+				# losses = model._run_forward(data_batch_for_adapt, mode='loss')  # type: ignore
+
+				x = model.extract_feat(data_batch_for_adapt["inputs"])
+				losses = dict()
+				# loss_decode = model.decode_head.loss(x, data_batch_for_adapt["data_samples"],
+				# 									model.train_cfg)
+				seg_logits = model.decode_head.forward(x)
+				# loss_decode = model.decode_head.loss_by_feat(seg_logits, data_batch_for_adapt["data_samples"])
+				seg_label = model.decode_head._stack_batch_gt(data_batch_for_adapt["data_samples"])
+				seg_label = seg_label.squeeze(1)
+				seg_logits = resize(
+					input=seg_logits,
+					size=seg_label.shape[2:],
+					mode='bilinear',
+					align_corners=model.decode_head.align_corners)
+				losses[model.decode_head.loss_decode.loss_name] = \
+					model.decode_head.loss_decode(
+                    seg_logits,
+                    seg_label,
+                    weight=None,
+                    ignore_index=model.decode_head.ignore_index)
+				losses = add_prefix(losses, 'decode')
+				if model.with_auxiliary_head: assert NotImplementedError("see the class function for this branch")
+
+			parsed_losses, log_vars = model.parse_losses(losses)  # sum all element with loss in
 			optim_wrapper.update_params(parsed_losses)
 
 		# update ema 
