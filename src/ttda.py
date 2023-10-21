@@ -1195,12 +1195,12 @@ class TTDAHook(Hook):
 				seg_logits = model.decode_head.forward(x)
 				# loss_decode = model.decode_head.loss_by_feat(seg_logits, data_batch_for_adapt["data_samples"])
 				seg_label = model.decode_head._stack_batch_gt(data_batch_for_adapt["data_samples"])
-				seg_label = seg_label.squeeze(1)
 				seg_logits = resize(
 					input=seg_logits,
 					size=seg_label.shape[2:],
 					mode='bilinear',
 					align_corners=model.decode_head.align_corners)
+				seg_label = seg_label.squeeze(1)
 				losses[model.decode_head.loss_decode.loss_name] = \
 					model.decode_head.loss_decode(
                     seg_logits,
