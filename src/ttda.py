@@ -31,85 +31,87 @@ import torch.utils.checkpoint as cp
 import math
 
 def automask_consistency_loss(sam_automask, feats, outputs, cfg):
-    """
-    Calculate the consistency of the same color
-        input:
-            sam_automask: (B, w, h)
-                different color is indicated by different int
-            feats: (B, d, w, h)
-    """
-    batch_size = sam_automask.shape[0]
-    loss = 0.0
+	"""
+	Calculate the consistency of the same color
+		input:
+			sam_automask: (B, w, h)
+				different color is indicated by different int
+			feats: (B, d, w, h)
+			outputs: (B, C, w, h)
+	"""
+	sam_automask, feats, outputs = sam_automask.unsqueeze(1), feats.unsqueeze(1), outputs.unsqueeze(1)
+	batch_size = sam_automask.shape[0]
+	loss = 0.0
 
-    pixel_total = feats.shape[2] * feats.shape[3]
-    
-    for b in range(batch_size):
-        # flatten the automask and feats for convenience
-        sam_automask_flat = sam_automask[b].view(-1)
-        feats_flat = feats[b].view(feats.shape[1], -1)
-        outputs_flat = outputs[b].view(outputs.shape[1], -1)
+	pixel_total = feats.shape[2] * feats.shape[3]
+	
+	for b in range(batch_size):
+		# flatten the automask and feats for convenience
+		sam_automask_flat = sam_automask[b].view(-1)
+		feats_flat = feats[b].view(feats.shape[1], -1)
+		outputs_flat = outputs[b].view(outputs.shape[1], -1)
 
-        # get unique segments in the mask
-        segments = torch.unique(sam_automask_flat)
+		# get unique segments in the mask
+		segments = torch.unique(sam_automask_flat)
 
-        if cfg.strategy == "min_variance":
-            for segment in segments:
-                # get indices of current segment
-                segment_indices = torch.where(sam_automask_flat == segment)[0]
+		if cfg.strategy == "min_variance":
+			for segment in segments:
+				# get indices of current segment
+				segment_indices = torch.where(sam_automask_flat == segment)[0]
 
-                # get features of current segment
-                segment_feats = feats_flat[:, segment_indices]
+				# get features of current segment
+				segment_feats = feats_flat[:, segment_indices]
 
-                # calculate variance along the feature dimension
-                segment_variance = torch.var(segment_feats, dim=1, unbiased=False)
+				# calculate variance along the feature dimension
+				segment_variance = torch.var(segment_feats, dim=1, unbiased=False)
 
-                # count number of pixels in the segment
-                pixel_count = segment_indices.numel()
+				# count number of pixels in the segment
+				pixel_count = segment_indices.numel()
 
-                # add mean of variances to total loss, weighted by inverse of pixel count
-                loss += torch.mean(segment_variance) * (pixel_count / pixel_total)
+				# add mean of variances to total loss, weighted by inverse of pixel count
+				loss += torch.mean(segment_variance) * (pixel_count / pixel_total)
 
-        elif cfg.strategy == "close_to_confident":
-            """
-                use the top-{confidence_selected_ratio} confident pixel in the segment as the anchor
-                minimize the distance between the anchor and other pixels in the segment
-                outputs_flat: (C, N) which is before softmax
-                # cfg.confidence_type: "confidence" or "entropy"
-                # cfg.confidence_selected_ratio: 0.1
-            """
-            for segment in segments:
-                # get indices of current segment
-                segment_indices = torch.where(sam_automask_flat == segment)[0]
+		elif cfg.strategy == "close_to_confident":
+			"""
+				use the top-{confidence_selected_ratio} confident pixel in the segment as the anchor
+				minimize the distance between the anchor and other pixels in the segment
+				outputs_flat: (C, N) which is before softmax
+				# cfg.confidence_type: "confidence" or "entropy"
+				# cfg.confidence_selected_ratio: 0.1
+			"""
+			for segment in segments:
+				# get indices of current segment
+				segment_indices = torch.where(sam_automask_flat == segment)[0]
 
-                # get outputs of current segment
-                segment_outputs = outputs_flat[:, segment_indices]
+				# get outputs of current segment
+				segment_outputs = outputs_flat[:, segment_indices]
 
-                # get the confidence scores of the segment
-                if cfg.confidence_type == "confidence":
-                    segment_confidence = torch.max(torch.softmax(segment_outputs, dim=0), dim=0)[0]
-                    confidence_threshold = torch.topk(segment_confidence, max(1, int(cfg.confidence_selected_ratio * segment_confidence.shape[0])), largest=True)[0][-1]
-                    anchor_indices = torch.where(segment_confidence >= confidence_threshold)[0]
-                elif cfg.confidence_type == "entropy":
-                    segment_confidence = torch.sum(-torch.softmax(segment_outputs, dim=0) * torch.log(torch.softmax(segment_outputs, dim=0) + 1e-8), dim=0)
-                    confidence_threshold = torch.topk(segment_confidence, max(1, int(cfg.confidence_selected_ratio * segment_confidence.shape[0])), largest=False)[0][-1]
-                    anchor_indices = torch.where(segment_confidence <= confidence_threshold)[0]
-                else:
-                    raise ValueError(f"Unknown confidence type: {cfg.confidence_type}")
+				# get the confidence scores of the segment
+				if cfg.confidence_type == "confidence":
+					segment_confidence = torch.max(torch.softmax(segment_outputs, dim=0), dim=0)[0]
+					confidence_threshold = torch.topk(segment_confidence, max(1, int(cfg.confidence_selected_ratio * segment_confidence.shape[0])), largest=True)[0][-1]
+					anchor_indices = torch.where(segment_confidence >= confidence_threshold)[0]
+				elif cfg.confidence_type == "entropy":
+					segment_confidence = torch.sum(-torch.softmax(segment_outputs, dim=0) * torch.log(torch.softmax(segment_outputs, dim=0) + 1e-8), dim=0)
+					confidence_threshold = torch.topk(segment_confidence, max(1, int(cfg.confidence_selected_ratio * segment_confidence.shape[0])), largest=False)[0][-1]
+					anchor_indices = torch.where(segment_confidence <= confidence_threshold)[0]
+				else:
+					raise ValueError(f"Unknown confidence type: {cfg.confidence_type}")
 
-                # select the top-{confidence_selected_ratio} confident pixel in the segment as the anchor
-                anchor_feats = segment_outputs[:, anchor_indices]
-                anchor_feats = anchor_feats.mean(dim=1).unsqueeze(1).detach()
+				# select the top-{confidence_selected_ratio} confident pixel in the segment as the anchor
+				anchor_feats = segment_outputs[:, anchor_indices]
+				anchor_feats = anchor_feats.mean(dim=1).unsqueeze(1).detach()
 
-                # calculate distance between the anchor and other pixels in the segment
-                distance = torch.norm(segment_outputs[:, :, None] - anchor_feats[:, None, :], dim=0)
+				# calculate distance between the anchor and other pixels in the segment
+				distance = torch.norm(segment_outputs[:, :, None] - anchor_feats[:, None, :], dim=0)
 
-                # add mean distance to total loss, weighted by inverse of pixel count
-                pixel_count = segment_indices.numel()
-                loss += torch.mean(distance) * (pixel_count / pixel_total)
+				# add mean distance to total loss, weighted by inverse of pixel count
+				pixel_count = segment_indices.numel()
+				loss += torch.mean(distance) * (pixel_count / pixel_total)
 
-        else: raise NotImplementedError
+		else: raise NotImplementedError
 
-    return loss / batch_size  # Normalize by batch size
+	return loss / batch_size  # Normalize by batch size
 
 
 def param_migrate(base, tgt, rho):
@@ -1172,7 +1174,6 @@ class TTDAHook(Hook):
 		# init
 		if not self.kwargs.turn_on_adapt: return
 		use_pseudo_label = self.kwargs.use_pseudo_label
-		slide_adapt = self.kwargs.slide_adapt
 		assert len(batch["inputs"]) == 1, "only support batch_size=1"
 		inputs, data_samples = batch["inputs"], batch["data_samples"]
 		if not hasattr(self, "model_ori"): # source model for pseudo
@@ -1210,50 +1211,51 @@ class TTDAHook(Hook):
 			batch_pseudoed[0].pred_sem_seg.data = sem_seg_.unsqueeze(0)
 
 		# set data_batch_for_adapt for train
-		batch_pseudoed_slided = {"inputs": [], "data_samples": []}
-		batch_slided = {"inputs": [], "data_samples": []}
-		st = SegValueTrans(data_samples[0].img_shape, data_samples[0].ori_shape)
-		data_samples_tp = deepcopy(data_samples[0])
-		h_stride, w_stride = runner.model.test_cfg.stride
-		h_crop, w_crop = runner.model.test_cfg.crop_size
-		_, h_img, w_img = inputs[0].size()
-		h_grids = max(h_img - h_crop + h_stride - 1, 0) // h_stride + 1
-		w_grids = max(w_img - w_crop + w_stride - 1, 0) // w_stride + 1
-		for h_idx in range(h_grids):
-			for w_idx in range(w_grids):
-				y1 = h_idx * h_stride
-				x1 = w_idx * w_stride
-				y2 = min(y1 + h_crop, h_img)
-				x2 = min(x1 + w_crop, w_img)
-				y1 = max(y2 - h_crop, 0)
-				x1 = max(x2 - w_crop, 0)
-				crop_img = inputs[0][:, y1:y2, x1:x2]
-				# change the image shape to patch shape
-				data_sample_this = deepcopy(data_samples_tp)
-				# TODO change size, ... except for value
-				meta_info_ = data_sample_this.metainfo
-				meta_info_["img_shape"] = crop_img.shape[1:]
-				meta_info_["ori_shape"] = (st.trans(h_crop, 'h'), st.trans(w_crop, 'w'))
-				data_sample_this.set_metainfo(meta_info_)
-				
-				meta_this = deepcopy(data_sample_this)
-				meta_pseudoed_this = deepcopy(data_sample_this)
-				meta_this.gt_sem_seg = batch_pseudoed[0].gt_sem_seg[
-					st.trans(y1,'y'):st.trans(y2,'y'),
-					st.trans(x1,'x'):st.trans(x2,'x'),
-				]
-				meta_pseudoed_this.gt_sem_seg = batch_pseudoed[0].pred_sem_seg[
-					st.trans(y1,'y'):st.trans(y2,'y'),
-					st.trans(x1,'x'):st.trans(x2,'x'),
-				]
+		if self.kwargs.slide_adapt:
+			batch_pseudoed_slided = {"inputs": [], "data_samples": []}
+			batch_slided = {"inputs": [], "data_samples": []}
+			st = SegValueTrans(data_samples[0].img_shape, data_samples[0].ori_shape)
+			data_samples_tp = deepcopy(data_samples[0])
+			h_stride, w_stride = runner.model.test_cfg.stride
+			h_crop, w_crop = runner.model.test_cfg.crop_size
+			_, h_img, w_img = inputs[0].size()
+			h_grids = max(h_img - h_crop + h_stride - 1, 0) // h_stride + 1
+			w_grids = max(w_img - w_crop + w_stride - 1, 0) // w_stride + 1
+			for h_idx in range(h_grids):
+				for w_idx in range(w_grids):
+					y1 = h_idx * h_stride
+					x1 = w_idx * w_stride
+					y2 = min(y1 + h_crop, h_img)
+					x2 = min(x1 + w_crop, w_img)
+					y1 = max(y2 - h_crop, 0)
+					x1 = max(x2 - w_crop, 0)
+					crop_img = inputs[0][:, y1:y2, x1:x2]
+					# change the image shape to patch shape
+					data_sample_this = deepcopy(data_samples_tp)
+					# TODO change size, ... except for value
+					meta_info_ = data_sample_this.metainfo
+					meta_info_["img_shape"] = crop_img.shape[1:]
+					meta_info_["ori_shape"] = (st.trans(h_crop, 'h'), st.trans(w_crop, 'w'))
+					data_sample_this.set_metainfo(meta_info_)
+					
+					meta_this = deepcopy(data_sample_this)
+					meta_pseudoed_this = deepcopy(data_sample_this)
+					meta_this.gt_sem_seg = batch_pseudoed[0].gt_sem_seg[
+						st.trans(y1,'y'):st.trans(y2,'y'),
+						st.trans(x1,'x'):st.trans(x2,'x'),
+					]
+					meta_pseudoed_this.gt_sem_seg = batch_pseudoed[0].pred_sem_seg[
+						st.trans(y1,'y'):st.trans(y2,'y'),
+						st.trans(x1,'x'):st.trans(x2,'x'),
+					]
 
-				batch_slided['inputs'].append(crop_img) # 
-				batch_slided['data_samples'].append(meta_this) # 
-				batch_pseudoed_slided['inputs'].append(crop_img)
-				batch_pseudoed_slided['data_samples'].append(meta_pseudoed_this)
+					batch_slided['inputs'].append(crop_img) # 
+					batch_slided['data_samples'].append(meta_this) # 
+					batch_pseudoed_slided['inputs'].append(crop_img)
+					batch_pseudoed_slided['data_samples'].append(meta_pseudoed_this)
 		
 		### choose adapt
-		if slide_adapt:
+		if self.kwargs.slide_adapt:
 			data_batch_for_adapt = deepcopy(batch_pseudoed_slided) \
 				if use_pseudo_label else deepcopy(batch_slided)
 		else:
@@ -1262,6 +1264,7 @@ class TTDAHook(Hook):
 				for i in range(len(data_samples)):
 					data_batch_for_adapt["data_samples"][i].gt_sem_seg = batch_pseudoed[i].pred_sem_seg
 		data_batch_for_adapt_bak = deepcopy(data_batch_for_adapt)
+
 		### adapt - data_batch_for_adapt
 		with torch.enable_grad():
 			optim_wrapper = runner.optim_wrapper
@@ -1280,7 +1283,6 @@ class TTDAHook(Hook):
 						data_batch_for_adapt["inputs"], 
 						batch_img_metas,
 					)
-					losses = dict()
 					# loss_decode = model.decode_head.loss(x, data_batch_for_adapt["data_samples"],
 					# 									model.train_cfg)
 					# loss_decode = model.decode_head.loss_by_feat(seg_logits, data_batch_for_adapt["data_samples"])
@@ -1291,6 +1293,8 @@ class TTDAHook(Hook):
 						mode='bilinear',
 						align_corners=model.decode_head.align_corners)
 					seg_label = seg_label.squeeze(1)
+					prob = F.softmax(seg_logits, dim=1)
+					losses = dict()
 					# pseudo label
 					if self.kwargs.pseudo_label_loss.ratio:
 						losses[model.decode_head.loss_decode.loss_name] = \
@@ -1302,7 +1306,6 @@ class TTDAHook(Hook):
 						self.kwargs.pseudo_label_loss.ratio
 					# entropy
 					if self.kwargs.entropy_loss.ratio:
-						prob = F.softmax(seg_logits, dim=1)
 						entropy = -prob * torch.log(prob)
 						entropy = torch.sum(entropy, dim=1)
 						if self.kwargs.high_conf_mask.turn_on:
@@ -1310,18 +1313,17 @@ class TTDAHook(Hook):
 						entropy = entropy.mean()
 						losses["loss_en"] = entropy * self.kwargs.entropy_loss.ratio
 					# mean entropy
-					if self.kwargs.divese_loss.ratio:
+					if self.kwargs.diverse_loss.ratio:
 						if self.kwargs.high_conf_mask.turn_on:
 							entropy_global = prob[:,:,hign_conf_mask]
 						entropy_global = prob.mean()
 						entropy_global = torch.sum(-entropy_global * torch.log(entropy_global), dim=-1).mean()
-						losses["loss_englobal"] = - entropy_global * self.kwargs.divese_loss.ratio
+						losses["loss_englobal"] = - entropy_global * self.kwargs.diverse_loss.ratio
 					# sam loss
 					if self.kwargs.sam_loss.ratio:
-						automask = batch["data_samples"][0].automask
 						losses["loss_sam"] = automask_consistency_loss(
-							automask,
-							feats[0],
+							batch["data_samples"][0].automask.data,
+							feats[0].data,
 							seg_logits,
 							self.kwargs.sam_loss
 						) * self.kwargs.sam_loss.ratio
