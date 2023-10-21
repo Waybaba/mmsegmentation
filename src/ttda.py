@@ -1195,14 +1195,14 @@ class TTDAHook(Hook):
 				seg_logits = model.decode_head.forward(x)
 				# loss_decode = model.decode_head.loss_by_feat(seg_logits, data_batch_for_adapt["data_samples"])
 				seg_label = model.decode_head._stack_batch_gt(data_batch_for_adapt["data_samples"])
+				seg_logits = resize(
+					input=seg_logits,
+					size=seg_label.shape[2:],
+					mode='bilinear',
+					align_corners=model.decode_head.align_corners)
+				seg_label = seg_label.squeeze(1)
 				# pseudo label
 				if self.kwargs.pseudo_label_loss.ratio:
-					seg_logits = resize(
-						input=seg_logits,
-						size=seg_label.shape[2:],
-						mode='bilinear',
-						align_corners=model.decode_head.align_corners)
-					seg_label = seg_label.squeeze(1)
 					losses[model.decode_head.loss_decode.loss_name] = \
 						model.decode_head.loss_decode(
 						seg_logits,
@@ -1226,7 +1226,7 @@ class TTDAHook(Hook):
 					entropy_global = prob.mean()
 					entropy_global = torch.sum(-entropy_global * torch.log(entropy_global), dim=-1).mean()
 					losses["loss_englobal"] = - entropy_global * self.kwargs.divese_loss.ratio
-					losses = add_prefix(losses, 'decode')
+				losses = add_prefix(losses, 'decode')
 
 				if model.with_auxiliary_head: assert NotImplementedError("see the class function for this branch")
 
