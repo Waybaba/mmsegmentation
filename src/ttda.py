@@ -1308,8 +1308,9 @@ class TTDAHook(Hook):
 					if self.kwargs.entropy_loss.ratio:
 						entropy = -prob * torch.log(prob)
 						entropy = torch.sum(entropy, dim=1)
-						if self.kwargs.high_conf_mask.turn_on:
-							entropy = entropy[:,hign_conf_mask] # need support batch > 1
+						entropy[entropy != entropy] = 1 # nan to 1
+						# if self.kwargs.high_conf_mask.turn_on:
+						# 	entropy = entropy[:,hign_conf_mask] # need support batch > 1
 						entropy = entropy.mean()
 						losses["loss_en"] = entropy * self.kwargs.entropy_loss.ratio
 					# mean entropy

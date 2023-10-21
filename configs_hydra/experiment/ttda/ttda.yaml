@@ -21,14 +21,14 @@ ttda_hook:
     proto_mask_metric: "entropy" # confidence, entropy, ground_truth, none
     proto_mask_use_history: false # whether top_p threshold is based on all history metric or only this img
   pseudo_label_loss:
-    ratio: 1.0 # 0. or 1. to only adjust entropy loss
+    ratio: 0.0 # 0. or 1. to only adjust entropy loss
     # mask_with: "ground_truth" # "pseudo_label" or "entropy" or "ground_truth"
     # mask_with_freeze: false
     # threshold: 0.9
     # target: "current" # "current" or "freeze"
     # class_balance: false
   entropy_loss:
-    ratio: 0.0
+    ratio: 1.0
     # mask_with: "entropy" # "pseudo_label", "entropy"
     # mask_with_freeze: false 
     # threshold: 0.1 # use as ratio if "class_balance" = true
