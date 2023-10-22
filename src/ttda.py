@@ -30,6 +30,39 @@ from mmseg.models import EncoderDecoder
 import torch.utils.checkpoint as cp
 import math
 
+@torch.no_grad()
+def sam_feats_proto_predict(sam_feats, logits, cfg):
+	""" 
+	use logits to calculate the confidence of each pixel for each class
+	use it as weight to calculate the prototype of each class with sam_feats space
+	then use the prototype to predict
+		sam_feats: (Ch, w_, h_) small
+		logits: (C, w, h) big 
+	return:
+		pred: (w, h)
+	"""
+	# If size is not provided, default to spatial dimensions of logits
+	size_ori = logits.shape[1:]
+	size_sm = sam_feats.shape[1:]
+
+	# intepolate sam feats
+	# sam_feats = F.interpolate(sam_feats.unsqueeze(0), size=size, mode='bilinear', align_corners=False).squeeze(0)
+	logits = F.interpolate(logits.unsqueeze(0), size=size_sm, mode='bilinear', align_corners=False).squeeze(0)
+	
+	# Ensure logits are of the same spatial size as interpolated sam_feats
+	# logits = F.interpolate(logits.unsqueeze(0), size=size, mode='bilinear', align_corners=False).squeeze(0)
+
+	pred_weights = F.softmax(logits / cfg.tau, dim=0)
+	weighted_feats = (sam_feats.unsqueeze(0) * pred_weights.unsqueeze(1)).sum(dim=-1).sum(dim=-1)
+	prototypes = F.normalize(weighted_feats, dim=1)
+	similarity = torch.matmul(prototypes, sam_feats.view(sam_feats.size(0), -1)).view(prototypes.size(0), sam_feats.size(1), sam_feats.size(2))
+	# similarity = torch.einsum('chw,cd->dhw', sam_feats, prototypes)
+	similarity = F.interpolate(similarity.unsqueeze(0), size=size_ori, mode='bilinear', align_corners=False).squeeze(0)
+	pred = similarity.argmax(dim=0)
+	
+	return pred
+
+
 def automask_consistency_loss(sam_automask, feats, outputs, cfg):
 	"""
 	Calculate the consistency of the same color
@@ -113,6 +146,30 @@ def automask_consistency_loss(sam_automask, feats, outputs, cfg):
 
 	return loss / batch_size  # Normalize by batch size
 
+def adjust_with_sam(logits, automask, sam_ratio):
+	"""
+	Adjust logits based on automask value.
+
+	Parameters:
+	- logits: Tensor of logits. Shape: (C, H, W)
+	- automask: Tensor of shape (1, H, W) representing automask values.
+	- sam_ratio: A scalar controlling the strength of adjustment. float
+
+	Returns:
+	- Adjusted logits.
+	"""
+	if sam_ratio == 0.: return logits
+	unique_masks = torch.unique(automask)
+	adjusted_logits = logits.clone()
+
+	for mask in unique_masks:
+		mask_indices = (automask.squeeze(0) == mask)  # Shape: (H, W)
+		mean_logits_per_channel = torch.mean(logits[:, mask_indices], dim=1, keepdim=True)  # Shape: (C, 1)
+		
+		# Use broadcasting to update the adjusted logits for the current mask
+		adjusted_logits[:, mask_indices] = (1 - sam_ratio) * logits[:, mask_indices] + sam_ratio * mean_logits_per_channel
+
+	return adjusted_logits
 
 def param_migrate(base, tgt, rho):
 	"""
@@ -438,6 +495,29 @@ class EncoderDecoderWrapper(EncoderDecoder):
 				self.protos_classifier.add_sample(feats_data, res[i].seg_logits.data, res[i].pred_sem_seg.data)
 				pred = self.protos_classifier.predict(feats_data)
 				res[i].pred_sem_seg.data = pred
+		return res
+
+	def test_step_sam_predict(self, data, cfg=None):
+		"""
+		TODO remember to reset buffer
+		TODO 255 class hwo to handle
+		here, cfg is set by partial at init stage of runner
+		"""
+		data = self.data_preprocessor(data, False)
+		res = self._run_forward_plus(data, mode='predict')  # type: ignore
+		for i, d in enumerate(res):
+			feats = res[i].feats.data
+			sam_feats = res[i].sam_feats.data
+			logits = res[i].seg_logits.data
+			automask = res[i].automask.data
+			if cfg.type == "sam_feats_proto":
+				res[i].pred_sem_seg.data = sam_feats_proto_predict(sam_feats, logits, cfg)
+			elif cfg.type == "logits_mask_adjust":
+				# TODO add confidence threshold
+				logits_ = adjust_with_sam(logits, automask, cfg.sam_ratio)
+				res[i].pred_sem_seg.data = logits_.argmax(0)
+			else:
+				raise NotImplementedError(f"Unknown sam type: {cfg.type}")
 		return res
 
 	def test_step_plus(self, data):
@@ -1385,8 +1465,12 @@ class TTDAHook(Hook):
 			runner.logger.info('fake train init done')
 		
 		# predict mode switch
-		# if self.kwargs.proto_predict.turn_on:
-		runner.model.test_step = partial(runner.model.test_step_proto_predict, cfg=self.kwargs.proto_predict)
+		assert not (self.kwargs.proto_predict.turn_on and self.kwargs.sam_predict.turn_on), \
+			"proto_predict and sam_predict should not be on at the same time"
+		if self.kwargs.proto_predict.turn_on:
+			runner.model.test_step = partial(runner.model.test_step_proto_predict, cfg=self.kwargs.proto_predict)
+		elif self.kwargs.sam_predict.turn_on:
+			runner.model.test_step = partial(runner.model.test_step_sam_predict, cfg=self.kwargs.sam_predict)
 
 	def before_test_iter(self,
 						 runner: Runner,

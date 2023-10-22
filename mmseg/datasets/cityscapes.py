@@ -61,24 +61,10 @@ class CityscapesDataset(BaseSegDataset):
 	def __getitem__(self, idx: int) -> dict:
 		res = super().__getitem__(idx)
 		res = self.add_automask(res)
+		res = self.add_sam_feats(res)
 		return res
 
 	def add_automask(self, res):
-		"""
-		read mask from path, where each pixel is a int value
-		input: 
-			info: {...}
-		output: 
-			ori_data: {
-				img_metas: {
-					filename: "/data/Cityscapes/leftImg8bit/val/frankfurt/frankfurt_000000_012009_leftImg8bit.png"
-				}
-			}
-			info_new: {
-				...,
-				"automask": np.array,
-			}
-		"""
 		# TODO sam extend for other datasets
 		path = self.data_root + "/sam_val/automask_bwh/" + \
 			res["data_samples"].img_path \
@@ -88,4 +74,16 @@ class CityscapesDataset(BaseSegDataset):
 		automask = torch.tensor(automask, dtype=torch.uint8)
 		res["data_samples"].automask = PixelData()
 		res["data_samples"].automask.data = automask.unsqueeze(0)
+		return res
+
+	def add_sam_feats(self, res):
+		# TODO sam extend for other datasets
+		name_this = res["data_samples"].img_path.split("/")[-1].split(".")[-2]
+		# ! DEBUG
+		name_this = "frankfurt_000001_049770_leftImg8bit"
+		path = self.data_root + "/sam_val/feats_bcwh/" + name_this + ".npy"
+		feats = np.load(path, allow_pickle=True) # bcwh
+		feats = torch.tensor(feats)
+		res["data_samples"].sam_feats = PixelData()
+		res["data_samples"].sam_feats.data = feats.squeeze(0)
 		return res
