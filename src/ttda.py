@@ -505,6 +505,7 @@ class EncoderDecoderWrapper(EncoderDecoder):
 		"""
 		data = self.data_preprocessor(data, False)
 		res = self._run_forward_plus(data, mode='predict')  # type: ignore
+<<<<<<< HEAD
 		for i, d in enumerate(res):
 			feats = res[i].feats.data
 			sam_feats = res[i].sam_feats.data
@@ -518,6 +519,16 @@ class EncoderDecoderWrapper(EncoderDecoder):
 				res[i].pred_sem_seg.data = logits_.argmax(0)
 			else:
 				raise NotImplementedError(f"Unknown sam type: {cfg.type}")
+=======
+		if cfg.turn_on:
+			for i, d in enumerate(res):
+				# TODO add confidence threshold
+				feats_data = res[i].feats.data
+				logits = res[i].seg_logits.data
+				automask = res[i].automask.data
+				logits_ = adjust_with_sam(logits, automask, cfg.sam_ratio)
+				res[i].pred_sem_seg.data = logits_.argmax(0)
+>>>>>>> 0c5363a69d1bc02b1b17a7b2bbeabf588cb56d34
 		return res
 
 	def test_step_plus(self, data):
