@@ -113,6 +113,30 @@ def automask_consistency_loss(sam_automask, feats, outputs, cfg):
 
 	return loss / batch_size  # Normalize by batch size
 
+def adjust_with_sam(logits, automask, sam_ratio):
+	"""
+	Adjust logits based on automask value.
+
+	Parameters:
+	- logits: Tensor of logits. Shape: (C, H, W)
+	- automask: Tensor of shape (1, H, W) representing automask values.
+	- sam_ratio: A scalar controlling the strength of adjustment. float
+
+	Returns:
+	- Adjusted logits.
+	"""
+	if sam_ratio == 0.: return logits
+	unique_masks = torch.unique(automask)
+	adjusted_logits = logits.clone()
+
+	for mask in unique_masks:
+		mask_indices = (automask.squeeze(0) == mask)  # Shape: (H, W)
+		mean_logits_per_channel = torch.mean(logits[:, mask_indices], dim=1, keepdim=True)  # Shape: (C, 1)
+		
+		# Use broadcasting to update the adjusted logits for the current mask
+		adjusted_logits[:, mask_indices] = (1 - sam_ratio) * logits[:, mask_indices] + sam_ratio * mean_logits_per_channel
+
+	return adjusted_logits
 
 def param_migrate(base, tgt, rho):
 	"""
@@ -438,6 +462,24 @@ class EncoderDecoderWrapper(EncoderDecoder):
 				self.protos_classifier.add_sample(feats_data, res[i].seg_logits.data, res[i].pred_sem_seg.data)
 				pred = self.protos_classifier.predict(feats_data)
 				res[i].pred_sem_seg.data = pred
+		return res
+
+	def test_step_sam_predict(self, data, cfg=None):
+		"""
+		TODO remember to reset buffer
+		TODO 255 class hwo to handle
+		here, cfg is set by partial at init stage of runner
+		"""
+		data = self.data_preprocessor(data, False)
+		res = self._run_forward_plus(data, mode='predict')  # type: ignore
+		if cfg.turn_on:
+			for i, d in enumerate(res):
+				# TODO add confidence threshold
+				feats_data = res[i].feats.data
+				logits = res[i].seg_logits.data
+				automask = res[i].automask.data
+				logits_ = adjust_with_sam(logits, automask, cfg.sam_ratio)
+				res[i].pred_sem_seg.data = logits_.argmax(0)
 		return res
 
 	def test_step_plus(self, data):
@@ -1385,8 +1427,12 @@ class TTDAHook(Hook):
 			runner.logger.info('fake train init done')
 		
 		# predict mode switch
-		# if self.kwargs.proto_predict.turn_on:
-		runner.model.test_step = partial(runner.model.test_step_proto_predict, cfg=self.kwargs.proto_predict)
+		assert not (self.kwargs.proto_predict.turn_on and self.kwargs.sam_predict.turn_on), \
+			"proto_predict and sam_predict should not be on at the same time"
+		if self.kwargs.proto_predict.turn_on:
+			runner.model.test_step = partial(runner.model.test_step_proto_predict, cfg=self.kwargs.proto_predict)
+		elif self.kwargs.sam_predict.turn_on:
+			runner.model.test_step = partial(runner.model.test_step_sam_predict, cfg=self.kwargs.sam_predict)
 
 	def before_test_iter(self,
 						 runner: Runner,
