@@ -80,7 +80,7 @@ class CityscapesDataset(BaseSegDataset):
 		# TODO sam extend for other datasets
 		name_this = res["data_samples"].img_path.split("/")[-1].split(".")[-2]
 		# ! DEBUG
-		name_this = "frankfurt_000001_049770_leftImg8bit"
+		# name_this = "frankfurt_000001_049770_leftImg8bit"
 		path = self.data_root + "/sam_val/feats_bcwh/" + name_this + ".npy"
 		feats = np.load(path, allow_pickle=True) # bcwh
 		feats = torch.tensor(feats)
