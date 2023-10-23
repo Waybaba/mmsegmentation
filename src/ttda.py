@@ -1374,13 +1374,21 @@ class TTDAHook(Hook):
 					losses = dict()
 					# pseudo label
 					if self.kwargs.pseudo_label_loss.ratio:
+						# losses[model.decode_head.loss_decode.loss_name] = \
+						# 	model.decode_head.loss_decode(
+						# 	seg_logits,
+						# 	seg_label,
+						# 	weight=None,
+						# 	ignore_index=model.decode_head.ignore_index) * \
+						# self.kwargs.pseudo_label_loss.ratio
 						losses[model.decode_head.loss_decode.loss_name] = \
-							model.decode_head.loss_decode(
-							seg_logits,
-							seg_label,
-							weight=None,
-							ignore_index=model.decode_head.ignore_index) * \
-						self.kwargs.pseudo_label_loss.ratio
+							F.cross_entropy(
+								seg_logits,
+								seg_label,
+								weight=None,
+								reduction='none',
+								ignore_index=model.decode_head.ignore_index) * \
+							self.kwargs.pseudo_label_loss.ratio
 					# entropy
 					if self.kwargs.entropy_loss.ratio:
 						prob_ = F.softmax(seg_logits/self.kwargs.entropy_loss.tau, dim=1)
