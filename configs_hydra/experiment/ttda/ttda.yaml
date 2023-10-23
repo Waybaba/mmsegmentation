@@ -26,26 +26,26 @@ ttda_hook:
     type: sam_feats_proto # logits_mask_adjust, sam_feats_proto
     tau: 1.0 # temperature for sam feats pseudo weights
   pseudo_label_loss:
-    ratio: 0.0 # 0. or 1. to only adjust entropy loss
+    ratio: 1.0 # 0. or 1. to only adjust entropy loss
     # mask_with: "ground_truth" # "pseudo_label" or "entropy" or "ground_truth"
     # mask_with_freeze: false
     # threshold: 0.9
     # target: "current" # "current" or "freeze"
     # class_balance: false
   entropy_loss:
-    ratio: 1.0
+    ratio: 0.0
     # mask_with: "entropy" # "pseudo_label", "entropy"
     # mask_with_freeze: false 
     # threshold: 0.1 # use as ratio if "class_balance" = true
     # class_balance: false
-    tau: 1.0 # temperature for entropy loss # would increase the weight of confident ones
+    tau: 0.0 # temperature for entropy loss # would increase the weight of confident ones
   sam_loss:
     ratio: 0.0
     strategy: "close_to_confident" # min_variance, close_to_confident
     confidence_type: "entropy" # "confidence", "entropy"
     confidence_selected_ratio: 0.1
   diverse_loss:
-    ratio: 1.0
+    ratio: 0.0
   ema:
     turn_on: false
     rho: 0.3 # how much would ema be updated each step
