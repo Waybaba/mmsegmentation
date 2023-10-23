@@ -42,16 +42,13 @@ def sam_feats_proto_predict(sam_feats, logits, cfg):
 		pred: (w, h)
 	"""
 	# If size is not provided, default to spatial dimensions of logits
+	sam_feats, logits = sam_feats.clone(), logits.clone()
+	sam_feats = F.normalize(sam_feats, dim=0)
 	size_ori = logits.shape[1:]
 	size_sm = sam_feats.shape[1:]
 
-	# intepolate sam feats
-	# sam_feats = F.interpolate(sam_feats.unsqueeze(0), size=size, mode='bilinear', align_corners=False).squeeze(0)
 	logits = F.interpolate(logits.unsqueeze(0), size=size_sm, mode='bilinear', align_corners=False).squeeze(0)
 	
-	# Ensure logits are of the same spatial size as interpolated sam_feats
-	# logits = F.interpolate(logits.unsqueeze(0), size=size, mode='bilinear', align_corners=False).squeeze(0)
-
 	pred_weights = F.softmax(logits / cfg.tau, dim=0)
 	weighted_feats = (sam_feats.unsqueeze(0) * pred_weights.unsqueeze(1)).sum(dim=-1).sum(dim=-1)
 	prototypes = F.normalize(weighted_feats, dim=1)
@@ -59,7 +56,6 @@ def sam_feats_proto_predict(sam_feats, logits, cfg):
 	# similarity = torch.einsum('chw,cd->dhw', sam_feats, prototypes)
 	similarity = F.interpolate(similarity.unsqueeze(0), size=size_ori, mode='bilinear', align_corners=False).squeeze(0)
 	pred = similarity.argmax(dim=0)
-	
 	return pred
 
 
