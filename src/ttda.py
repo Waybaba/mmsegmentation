@@ -29,6 +29,7 @@ from mmseg.models.backbones import MixVisionTransformer
 from mmseg.models import EncoderDecoder
 import torch.utils.checkpoint as cp
 import math
+EPS = 1e-10
 
 @torch.no_grad()
 def sam_feats_proto_predict(sam_feats, logits, cfg):
@@ -1382,9 +1383,8 @@ class TTDAHook(Hook):
 						self.kwargs.pseudo_label_loss.ratio
 					# entropy
 					if self.kwargs.entropy_loss.ratio:
-						epsilon = 1e-10
 						prob_ = F.softmax(seg_logits/self.kwargs.entropy_loss.tau, dim=1)
-						entropy = -prob_ * torch.log(prob_+epsilon)
+						entropy = -prob_ * torch.log(prob_+EPS)
 						entropy = torch.sum(entropy, dim=1)
 						# entropy[entropy != entropy] = 1 # nan to 1
 						# if self.kwargs.high_conf_mask.turn_on:
@@ -1393,11 +1393,16 @@ class TTDAHook(Hook):
 						losses["loss_en"] = entropy * self.kwargs.entropy_loss.ratio
 					# mean entropy
 					if self.kwargs.diverse_loss.ratio:
+						# Calculate global entropy
 						if self.kwargs.high_conf_mask.turn_on:
-							entropy_global = prob[:,:,hign_conf_mask]
-						entropy_global = prob.mean()
-						entropy_global = torch.sum(-entropy_global * torch.log(entropy_global), dim=-1).mean()
-						losses["loss_englobal"] = - entropy_global * self.kwargs.diverse_loss.ratio
+							entropy_global = prob[:, :, hign_conf_mask]  # (B, C, H, W) -> (B, C, H*W)
+							entropy_global = entropy_global.mean(-1).squeeze(0)  # (C)
+						else:
+							entropy_global = prob.mean(-1).mean(-1).squeeze(0)  # (C)
+
+						# Compute entropy loss with added epsilon
+						entropy_loss = torch.sum(-entropy_global * torch.log(entropy_global + EPS), dim=-1)
+						losses["loss_englobal"] = -entropy_loss * self.kwargs.diverse_loss.ratio
 					# sam loss
 					if self.kwargs.sam_loss.ratio:
 						losses["loss_sam"] = automask_consistency_loss(

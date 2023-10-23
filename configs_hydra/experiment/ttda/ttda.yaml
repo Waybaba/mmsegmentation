@@ -45,7 +45,7 @@ ttda_hook:
     confidence_type: "entropy" # "confidence", "entropy"
     confidence_selected_ratio: 0.1
   diverse_loss:
-    ratio: 0.0
+    ratio: 1.0
   ema:
     turn_on: false
     rho: 0.3 # how much would ema be updated each step
