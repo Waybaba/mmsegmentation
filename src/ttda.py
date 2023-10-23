@@ -495,6 +495,7 @@ class EncoderDecoderWrapper(EncoderDecoder):
 				self.protos_classifier.add_sample(feats_data, res[i].seg_logits.data, res[i].pred_sem_seg.data)
 				pred = self.protos_classifier.predict(feats_data)
 				res[i].pred_sem_seg.data = pred
+				
 		return res
 
 	def test_step_sam_predict(self, data, cfg=None):
