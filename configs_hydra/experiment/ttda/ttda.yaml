@@ -27,6 +27,7 @@ ttda_hook:
     tau: 1.0 # temperature for sam feats pseudo weights
   pseudo_label_loss:
     ratio: 1.0 # 0. or 1. to only adjust entropy loss
+    conf_weight_tau: -5.0 # 0.0 means average
     # mask_with: "ground_truth" # "pseudo_label" or "entropy" or "ground_truth"
     # mask_with_freeze: false
     # threshold: 0.9

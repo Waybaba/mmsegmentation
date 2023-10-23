@@ -30,6 +30,25 @@ from mmseg.models import EncoderDecoder
 import torch.utils.checkpoint as cp
 import math
 EPS = 1e-10
+def quadratic_function(x, a):
+    """
+    Computes the value of a quadratic function that passes through points (0,0) and (1,1).
+
+    This function is defined as: f(x) = ax^2 + (1-a)x
+    The shape of the curve (concave or convex) is determined by the parameter 'a'.
+    
+    Parameters:
+    - x (float): The input value for which the function value needs to be computed. 
+                 Expected to be in the range [0, 1].
+    - a (float): The parameter that controls the concavity or convexity of the function.
+                 When a > 0, the function is convex (upwards facing).
+                 When a < 0, the function is concave (downwards facing).
+                 When a = 0, the function is a straight line.
+
+    Returns:
+    - float: The computed value of the function for the given 'x'.
+    """
+    return a * x**2 + (1-a) * x
 
 @torch.no_grad()
 def sam_feats_proto_predict(sam_feats, logits, cfg):
@@ -1387,10 +1406,15 @@ class TTDAHook(Hook):
 								seg_label,
 								weight=None,
 								reduction='none',
-								ignore_index=model.decode_head.ignore_index) * \
-							self.kwargs.pseudo_label_loss.ratio
+								ignore_index=model.decode_head.ignore_index)  # B,w,h
+						if self.kwargs.pseudo_label_loss.conf_weight_tau != 0.0:
+							with torch.no_grad():
+								weight_ = prob.max(1)[0].detach() # (B,w,h)(0-1)
+								tau = self.kwargs.pseudo_label_loss.conf_weight_tau
+								weight_ = quadratic_function(weight_, tau).detach()
+								loss_ = (loss_ * weight_)
 						loss_ = loss_.mean()
-						losses[model.decode_head.loss_decode.loss_name] = loss_
+						losses[model.decode_head.loss_decode.loss_name] = loss_ * self.kwargs.pseudo_label_loss.ratio
 					# entropy
 					if self.kwargs.entropy_loss.ratio:
 						prob_ = F.softmax(seg_logits/self.kwargs.entropy_loss.tau, dim=1)
@@ -1404,11 +1428,11 @@ class TTDAHook(Hook):
 					# mean entropy
 					if self.kwargs.diverse_loss.ratio:
 						# Calculate global entropy
-						if self.kwargs.high_conf_mask.turn_on:
-							entropy_global = prob[:, :, hign_conf_mask]  # (B, C, H, W) -> (B, C, H*W)
-							entropy_global = entropy_global.mean(-1).squeeze(0)  # (C)
-						else:
-							entropy_global = prob.mean(-1).mean(-1).squeeze(0)  # (C)
+						# if self.kwargs.high_conf_mask.turn_on:
+						# 	entropy_global = prob[:, :, hign_conf_mask]  # (B, C, H, W) -> (B, C, H*W)
+						# 	entropy_global = entropy_global.mean(-1).squeeze(0)  # (C)
+						# else:
+						entropy_global = prob.mean(-1).mean(-1).squeeze(0)  # (C)
 
 						# Compute entropy loss with added epsilon
 						entropy_loss = torch.sum(-entropy_global * torch.log(entropy_global + EPS), dim=-1)
