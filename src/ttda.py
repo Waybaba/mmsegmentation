@@ -1415,7 +1415,7 @@ class TTDAHook(Hook):
 								loss_ = (loss_ * weight_)
 						loss_ = loss_.mean()
 						losses[model.decode_head.loss_decode.loss_name] = loss_ * self.kwargs.pseudo_label_loss.ratio
-					# entropy
+					# entropy 
 					if self.kwargs.entropy_loss.ratio:
 						prob_ = F.softmax(seg_logits/self.kwargs.entropy_loss.tau, dim=1)
 						entropy = -prob_ * torch.log(prob_+EPS)
