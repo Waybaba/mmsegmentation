@@ -1412,7 +1412,7 @@ class TTDAHook(Hook):
 								weight_ = prob.max(1)[0].detach() # (B,w,h)(0-1)
 								tau = self.kwargs.pseudo_label_loss.conf_weight_tau
 								weight_ = quadratic_function(weight_, tau).detach()
-								loss_ = (loss_ * weight_)
+							loss_ = (loss_ * weight_)
 						loss_ = loss_.mean()
 						losses[model.decode_head.loss_decode.loss_name] = loss_ * self.kwargs.pseudo_label_loss.ratio
 					# entropy 
