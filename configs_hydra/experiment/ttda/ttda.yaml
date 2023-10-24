@@ -23,8 +23,9 @@ ttda_hook:
   sam_predict:
     turn_on: ???
     sam_ratio: 0.2 # 0.0 means no sam
-    type: sam_feats_proto # logits_mask_adjust, sam_feats_proto
+    type: logits_mask_adjust # logits_mask_adjust, sam_feats_proto
     tau: 1.0 # temperature for sam feats pseudo weights
+    use_prob: true
   pseudo_label_loss:
     ratio: 1.0 # 0. or 1. to only adjust entropy loss
     conf_weight_tau: -5.0 # 0.0 means average

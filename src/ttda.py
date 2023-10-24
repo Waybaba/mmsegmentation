@@ -162,7 +162,7 @@ def automask_consistency_loss(sam_automask, feats, outputs, cfg):
 
 	return loss / batch_size  # Normalize by batch size
 
-def adjust_with_sam(logits, automask, sam_ratio):
+def adjust_with_sam(logits, automask, cfg):
 	"""
 	Adjust logits based on automask value.
 
@@ -174,9 +174,11 @@ def adjust_with_sam(logits, automask, sam_ratio):
 	Returns:
 	- Adjusted logits.
 	"""
+	sam_ratio = cfg.sam_ratio
 	if sam_ratio == 0.: return logits
 	unique_masks = torch.unique(automask)
 	adjusted_logits = logits.clone()
+	if cfg.use_prob: adjusted_logits = torch.softmax(adjusted_logits, dim=0)
 
 	for mask in unique_masks:
 		mask_indices = (automask.squeeze(0) == mask)  # Shape: (H, W)
@@ -530,7 +532,7 @@ class EncoderDecoderWrapper(EncoderDecoder):
 				res[i].pred_sem_seg.data = sam_feats_proto_predict(sam_feats, logits, cfg)
 			elif cfg.type == "logits_mask_adjust":
 				# TODO add confidence threshold
-				logits_ = adjust_with_sam(logits, automask, cfg.sam_ratio)
+				logits_ = adjust_with_sam(logits, automask, cfg)
 				res[i].pred_sem_seg.data = logits_.argmax(0)
 			else:
 				raise NotImplementedError(f"Unknown sam type: {cfg.type}")
