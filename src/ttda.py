@@ -408,93 +408,6 @@ class EncoderDecoderWrapper(EncoderDecoder):
 					self.protos_count = {}  # Dictionary to store count of pixels for each class: {class_label: int}
 					self.cfg = cfg # use by self.cfg.rho and self.cfg.lambda_
 
-				def add_sample(self, feats, logits, pred):
-					"""
-					feats: C, H, W
-					pred_sem_seg: 1, H, W 
-					note case that some classes are missing in history,
-					or this is the first time to see this class
-					"""
-					confidence = torch.softmax(logits, dim=0).max(dim=0)[0]  # shape: [1, H, W]
-					entropy = -torch.sum(torch.log_softmax(logits, dim=0) * torch.softmax(logits, dim=0), dim=0)  # shape: [1, H, W]
-
-					# proto_mask_metric
-					if cfg.proto_mask_metric is not None:
-						assert cfg.proto_mask_metric in ["confidence", "entropy"], f"cfg.proto_mask_metric should be confidence or entropy, but got {cfg.proto_mask_metric}"
-						seg_metric = confidence if cfg.proto_mask_metric == "confidence" \
-							else -entropy # use neg since seg_mask only keep higher
-						if not hasattr(self, "seg_masker"):
-							self.seg_masker = SegMasker(use_history=cfg.proto_mask_use_history)
-						self.seg_masker.add_to_buffer(seg_metric, pred[0])
-						hign_conf_mask = self.seg_masker.cal_mask(
-							seg_metric,
-							pred[0],
-							cfg.proto_mask_top_p
-						)
-						pred[0][~hign_conf_mask] = 255 # to 255 and skip in the following
-
-					# Iterate over the unique classes in pred_sem_seg
-					for class_label in torch.unique(pred):
-						class_label = class_label.item()
-						if class_label == 255: 
-							continue # 
-						class_feats = feats[:, pred[0] == class_label]  # Extract features corresponding to this class
-						if class_label not in self.protos_mean:
-							# If the class is not seen before, simply set the mean and count
-							self.protos_mean[class_label] = class_feats.mean(dim=1, keepdim=False)
-							self.protos_count[class_label] = class_feats.size(1)
-						else:
-							# Update mean and count using the provided formula
-							new_count = class_feats.size(1)
-							new_mean = class_feats.mean(dim=1, keepdim=False)
-							if self.cfg.rho == "count":
-								updated_mean = (self.protos_mean[class_label] * self.protos_count[class_label] + new_mean * new_count) / (self.protos_count[class_label] + new_count)
-							elif isinstance(self.cfg.rho, (float,int)):
-								updated_mean = (self.protos_mean[class_label] *  (1 - self.cfg.rho) + new_mean * self.cfg.rho)
-							self.protos_mean[class_label] = updated_mean
-							self.protos_count[class_label] += new_count
-
-				def predict(self, feats):
-					"""
-					feats: C, H, W
-					return pred_sem_seg data: 1, H, W
-					"""
-					C, H, W = feats.shape
-					pred_sem_seg = torch.zeros(1, H, W).long().to(feats.device)
-
-					# Extract the prototypes from the current image
-					proto_this_img_list = []
-					class_labels_list = list(self.protos_mean.keys())
-					for class_label in class_labels_list:
-						class_feats = feats[:, pred_sem_seg[0] == class_label]  # Extract features corresponding to this class
-						if class_feats.size(1) != 0:  # Check if the class exists in this image
-							proto_this_img = class_feats.mean(dim=1, keepdim=False)
-							proto_this_img_list.append(proto_this_img)
-						else:
-							proto_this_img_list.append(self.protos_mean[class_label])  # If class not in image, use the historical prototype
-
-					# Combine historical prototypes and the prototypes from the current image
-					combined_protos = [self.cfg.lambda_ * history_proto + (1 - self.cfg.lambda_) * proto_this_img
-									for history_proto, proto_this_img in zip(self.protos_mean.values(), proto_this_img_list)]
-
-					# Convert combined_protos to tensor
-					proto_tensor = torch.stack(combined_protos, dim=0).to(feats.device)  # shape: [num_classes, C]
-
-					# Reshape feats for distance computation
-					feats_reshaped = feats.view(C, -1).transpose(0, 1)  # shape: [H*W, C]
-
-					# Compute distances
-					distances = torch.cdist(feats_reshaped, proto_tensor)  # shape: [H*W, num_classes]
-
-					# Get the class labels for the minimum distances
-					_, pred_class_indices = distances.min(dim=1)
-
-					# Map the indices back to actual class labels
-					pred_labels = torch.tensor(class_labels_list, dtype=torch.long).to(feats.device)
-					pred_sem_seg[0] = pred_labels[pred_class_indices].view(H, W)
-
-					return pred_sem_seg
-
 				def reset(self):
 					"""
 					Resets the learned prototypes.
@@ -502,17 +415,91 @@ class EncoderDecoderWrapper(EncoderDecoder):
 					self.protos_mean = {}
 					self.protos_count = {}
 
+				def process_one(self, feature_map, logit_map, prediction):
+					"""
+					Process a single image's semantic segmentation.
+
+					Args:
+						feature_map (Tensor): The feature map with shape [C, H, W].
+						logit_map (Tensor): The logit map with shape [C, H, W].
+						prediction (Tensor): The semantic segmentation prediction with shape [H, W].
+
+					Returns:
+						Tensor: Refined semantic segmentation prediction.
+					"""
+					# Calculate confidence and entropy based on logit_map
+					confidence = torch.softmax(logit_map, dim=0).max(dim=0)[0]
+					entropy = -torch.sum(torch.log_softmax(logit_map, dim=0) * torch.softmax(logit_map, dim=0), dim=0)
+					if self.cfg.norm_feats: # (Ch, num)
+						feature_map = F.normalize(feature_map, dim=0) # TODO move to class
+
+					# Mask calculation and application
+					if self.cfg.proto_mask_metric is not None:
+						if self.cfg.proto_mask_metric not in ["confidence", "entropy"]:
+							raise ValueError(f"cfg.proto_mask_metric should be confidence or entropy, but got {self.cfg.proto_mask_metric}")
+
+						seg_metric = confidence if self.cfg.proto_mask_metric == "confidence" else -entropy
+						
+						if not hasattr(self, "seg_masker"):
+							self.seg_masker = SegMasker(use_history=self.cfg.proto_mask_use_history)
+							
+						self.seg_masker.add_to_buffer(seg_metric, prediction)
+						high_conf_mask = self.seg_masker.cal_mask(seg_metric, prediction, self.cfg.proto_mask_top_p)
+						masked_prediction = prediction.clone()
+						masked_prediction[~high_conf_mask] = 255
+					else:
+						masked_prediction = prediction.clone()
+
+					# Extract and combine protos
+					C, H, W = feature_map.shape
+					unique_labels = [label for label in masked_prediction.unique().tolist() if label != 255]
+					combined_protos = []
+					for label in unique_labels:
+						class_features = feature_map[:, masked_prediction == label]
+						proto_current_img = class_features.mean(dim=1)
+						
+						if label in self.protos_mean:
+							combined_protos.append(self.cfg.lambda_ * self.protos_mean[label] + (1 - self.cfg.lambda_) * proto_current_img)
+						else:
+							combined_protos.append(proto_current_img)
+
+					proto_tensor = torch.stack(combined_protos, dim=0)
+
+					# Predict using protos
+					reshaped_features = feature_map.view(C, -1).transpose(0, 1)
+					distances = torch.cdist(reshaped_features, proto_tensor)
+					_, pred_class_indices = distances.min(dim=1)
+					pred_labels = torch.tensor(unique_labels, dtype=torch.long).to(feature_map.device)
+					refined_prediction = pred_labels[pred_class_indices].view(H, W)
+
+					# Update buffer with new protos
+					for label in unique_labels:
+						class_features = feature_map[:, masked_prediction == label]
+						if label not in self.protos_mean:
+							self.protos_mean[label] = class_features.mean(dim=1)
+							self.protos_count[label] = class_features.size(1)
+						else:
+							new_count = class_features.size(1)
+							new_mean = class_features.mean(dim=1)
+							if self.cfg.rho == "count":
+								updated_mean = (self.protos_mean[label] * self.protos_count[label] + new_mean * new_count) / (self.protos_count[label] + new_count)
+								self.protos_count[label] += new_count
+							elif isinstance(self.cfg.rho, (float, int)):
+								updated_mean = self.protos_mean[label] * (1 - self.cfg.rho) + new_mean * self.cfg.rho
+								self.protos_count[label] += new_count
+							self.protos_mean[label] = updated_mean
+
+					return refined_prediction
+
 			if not hasattr(self, 'protos_classifier'):
 				self.protos_classifier = ProtoClassifier(cfg)
 			for i, d in enumerate(res):
-				# TODO add confidence threshold
-				feats_data = res[i].feats.data
-				if cfg.norm_feats: # (Ch, num)
-					# norm to make each vector has norm 1, but keep the direction
-					feats_data = F.normalize(feats_data, dim=0)
-				self.protos_classifier.add_sample(feats_data, res[i].seg_logits.data, res[i].pred_sem_seg.data)
-				pred = self.protos_classifier.predict(feats_data)
-				res[i].pred_sem_seg.data = pred
+				res_pred = self.protos_classifier.process_one(
+					res[i].feats.data.clone(),
+					res[i].seg_logits.data.clone(),
+					res[i].pred_sem_seg.data[0].clone(),
+				)
+				res[i].pred_sem_seg.data = res_pred
 		return res
 
 	def test_step_sam_predict(self, data, cfg=None):
@@ -1460,8 +1447,9 @@ class TTDAHook(Hook):
 		if self.kwargs.ema.turn_on:
 			self.model_ema = param_migrate(self.model_ema, runner.model, self.kwargs.ema.rho)
 
-		# draw train sample
+		# draw
 		if self.every_n_inner_iters(batch_idx, self.kwargs.adapt_img_vis_freq):
+			# train sample
 			for i, output in enumerate(data_batch_for_adapt["data_samples"]):
 				# img_path = output.img_path
 				# img_bytes = fileio.get(
@@ -1487,6 +1475,34 @@ class TTDAHook(Hook):
 					step=runner.iter,
 					draw_pred=False
 					)
+			# sam
+			for i, output in enumerate(data_batch_for_adapt["data_samples"]):
+				size_ = output.gt_sem_seg.shape # (1024, 1024) # ! note w,h order
+				img = data_batch_for_adapt_bak["inputs"][i] # tensor (3, H, W)
+
+				img = img.float()
+				img = F.interpolate(img.unsqueeze(0), size=(size_[0], size_[1]), mode='bilinear', align_corners=True)
+				img = (img).byte()
+				img = img.squeeze(0).cpu().numpy().transpose(1, 2, 0)
+
+				output_ = deepcopy(output)
+				output_.gt_sem_seg.data = output.automask.data
+
+				if img.shape[-1] == 3:
+					img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+				runner.visualizer.add_datasample(
+					f"adapt/automask_sam_{i}",
+					img,
+					data_sample=output_,
+					show=False,
+					step=runner.iter,
+					draw_pred=False
+					)
+			# draw tsne
+			for i, output in enumerate(data_batch_for_adapt["data_samples"]):
+				size_ = output.gt_sem_seg.shape
+				feats = None
+
 		
 		runner.visualizer.add_scalars({
 			"adapt/"+k: v.item() for k, v in log_vars.items()
