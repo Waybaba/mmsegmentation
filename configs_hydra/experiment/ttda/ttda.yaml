@@ -16,7 +16,9 @@ ttda_hook:
     turn_on: ???
     rho: count # for updating prototype, history_proto = (1-rho) * history_proto + rho * proto_this_img
     lambda_: 0.0 # for using prototype, final_proto = lambda_ * history_proto + (1 - lambda_) * proto_this_img. if "count", use count as lambda
-    norm_feats: true
+    # norm_feats: true
+    norm_feats_mean: true
+    norm_feats_sim: true
     proto_mask_top_p: 0.9 # 
     proto_mask_metric: "entropy" # confidence, entropy, ground_truth, none
     proto_mask_use_history: false # whether top_p threshold is based on all history metric or only this img

@@ -78,7 +78,6 @@ def sam_feats_proto_predict(sam_feats, logits, cfg):
 	pred = similarity.argmax(dim=0)
 	return pred
 
-
 def automask_consistency_loss(sam_automask, feats, outputs, cfg):
 	"""
 	Calculate the consistency of the same color
@@ -205,6 +204,106 @@ def param_migrate(base, tgt, rho):
 			)
 	return base
 
+class ProtoClassifier:
+	"""
+		cfg: 
+			rho: 0.5 # for updating prototype, history_proto = (1-rho) * history_proto + rho * proto_this_img
+			lambda_: count # for using prototype, final_proto = lambda_ * history_proto + (1 - lambda_) * proto_this_img. if "count", use count as lambda
+	"""
+	def __init__(self, cfg):
+		self.protos_mean = {}  # Dictionary to store means for each class: {class_label: tensor of shape [C, H, W]}
+		self.protos_count = {}  # Dictionary to store count of pixels for each class: {class_label: int}
+		self.cfg = cfg # use by self.cfg.rho and self.cfg.lambda_
+
+	def reset(self):
+		"""
+		Resets the learned prototypes.
+		"""
+		self.protos_mean = {}
+		self.protos_count = {}
+
+	def process_one(self, feature_map, logit_map, prediction):
+		"""
+		Process a single image's semantic segmentation.
+
+		Args:
+			feature_map (Tensor): The feature map with shape [C, H, W].
+			logit_map (Tensor): The logit map with shape [C, H, W].
+			prediction (Tensor): The semantic segmentation prediction with shape [H, W].
+
+		Returns:
+			Tensor: Refined semantic segmentation prediction.
+		"""
+		# Calculate confidence and entropy based on logit_map
+		feature_map, logit_map, prediction = feature_map.cuda(), logit_map.cuda(), prediction.cuda()
+		confidence = torch.softmax(logit_map, dim=0).max(dim=0)[0]
+		entropy = -torch.sum(torch.log_softmax(logit_map, dim=0) * torch.softmax(logit_map, dim=0), dim=0)
+		if self.cfg.norm_feats_mean: # (Ch, num)
+			feature_map = F.normalize(feature_map, dim=0) # TODO move to class
+
+		# Mask calculation and application
+		if self.cfg.proto_mask_metric is not None:
+			if self.cfg.proto_mask_metric not in ["confidence", "entropy"]:
+				raise ValueError(f"cfg.proto_mask_metric should be confidence or entropy, but got {self.cfg.proto_mask_metric}")
+
+			seg_metric = confidence if self.cfg.proto_mask_metric == "confidence" else -entropy
+			
+			if not hasattr(self, "seg_masker"):
+				self.seg_masker = SegMasker(use_history=self.cfg.proto_mask_use_history)
+				
+			self.seg_masker.add_to_buffer(seg_metric, prediction)
+			high_conf_mask = self.seg_masker.cal_mask(seg_metric, prediction, self.cfg.proto_mask_top_p)
+			masked_prediction = prediction.clone()
+			masked_prediction[~high_conf_mask] = 255
+		else:
+			masked_prediction = prediction.clone()
+
+		# Extract and combine protos
+		C, H, W = feature_map.shape
+		unique_labels = [label for label in masked_prediction.unique().tolist() if label != 255]
+		combined_protos = []
+		for label in unique_labels:
+			class_features = feature_map[:, masked_prediction == label]
+			proto_current_img = class_features.mean(dim=1)
+			
+			if label in self.protos_mean:
+				combined_protos.append(self.cfg.lambda_ * self.protos_mean[label] + (1 - self.cfg.lambda_) * proto_current_img)
+			else:
+				combined_protos.append(proto_current_img)
+		proto_tensor = torch.stack(combined_protos, dim=0) # [cls, ch]
+
+		# Predict using protos
+		reshaped_features = feature_map.view(C, -1).transpose(0, 1) # [ch, N]
+		if self.cfg.norm_feats_sim == True:
+			reshaped_features_normalized = F.normalize(reshaped_features, p=2, dim=1)
+			proto_tensor_normalized = F.normalize(proto_tensor, p=2, dim=1)
+			distances = 1 - torch.mm(reshaped_features_normalized, proto_tensor_normalized.t())
+		else:
+			distances = torch.cdist(reshaped_features, proto_tensor)
+		_, pred_class_indices = distances.min(dim=1)
+		pred_labels = torch.tensor(unique_labels, dtype=torch.long).to(feature_map.device)
+		refined_prediction = pred_labels[pred_class_indices].view(H, W)
+
+		# Update buffer with new protos
+		for label in unique_labels:
+			class_features = feature_map[:, masked_prediction == label]
+			if label not in self.protos_mean:
+				self.protos_mean[label] = class_features.mean(dim=1)
+				self.protos_count[label] = class_features.size(1)
+			else:
+				new_count = class_features.size(1)
+				new_mean = class_features.mean(dim=1)
+				if self.cfg.rho == "count":
+					updated_mean = (self.protos_mean[label] * self.protos_count[label] + new_mean * new_count) / (self.protos_count[label] + new_count)
+					self.protos_count[label] += new_count
+				elif isinstance(self.cfg.rho, (float, int)):
+					updated_mean = self.protos_mean[label] * (1 - self.cfg.rho) + new_mean * self.cfg.rho
+					self.protos_count[label] += new_count
+				self.protos_mean[label] = updated_mean
+
+		return refined_prediction
+
+
 # TODO check model.train in ttda mode
 # TODO check multi head ! I only have one head
 def _scaled_dot_product_attention_llama_adapter(
@@ -240,6 +339,8 @@ def _scaled_dot_product_attention_llama_adapter(
 	# (B, Nt, Ns) x (B, Ns, E) -> (B, Nt, E)
 	output = torch.bmm(attn, v)
 	return output, attn
+
+
 
 @MODELS.register_module()
 class EncoderDecoderWrapper(EncoderDecoder):
@@ -397,100 +498,6 @@ class EncoderDecoderWrapper(EncoderDecoder):
 		data = self.data_preprocessor(data, False)
 		res = self._run_forward_plus(data, mode='predict')  # type: ignore
 		if cfg.turn_on:
-			class ProtoClassifier:
-				"""
-					cfg: 
-						rho: 0.5 # for updating prototype, history_proto = (1-rho) * history_proto + rho * proto_this_img
-						lambda_: count # for using prototype, final_proto = lambda_ * history_proto + (1 - lambda_) * proto_this_img. if "count", use count as lambda
-				"""
-				def __init__(self, cfg):
-					self.protos_mean = {}  # Dictionary to store means for each class: {class_label: tensor of shape [C, H, W]}
-					self.protos_count = {}  # Dictionary to store count of pixels for each class: {class_label: int}
-					self.cfg = cfg # use by self.cfg.rho and self.cfg.lambda_
-
-				def reset(self):
-					"""
-					Resets the learned prototypes.
-					"""
-					self.protos_mean = {}
-					self.protos_count = {}
-
-				def process_one(self, feature_map, logit_map, prediction):
-					"""
-					Process a single image's semantic segmentation.
-
-					Args:
-						feature_map (Tensor): The feature map with shape [C, H, W].
-						logit_map (Tensor): The logit map with shape [C, H, W].
-						prediction (Tensor): The semantic segmentation prediction with shape [H, W].
-
-					Returns:
-						Tensor: Refined semantic segmentation prediction.
-					"""
-					# Calculate confidence and entropy based on logit_map
-					confidence = torch.softmax(logit_map, dim=0).max(dim=0)[0]
-					entropy = -torch.sum(torch.log_softmax(logit_map, dim=0) * torch.softmax(logit_map, dim=0), dim=0)
-					if self.cfg.norm_feats: # (Ch, num)
-						feature_map = F.normalize(feature_map, dim=0) # TODO move to class
-
-					# Mask calculation and application
-					if self.cfg.proto_mask_metric is not None:
-						if self.cfg.proto_mask_metric not in ["confidence", "entropy"]:
-							raise ValueError(f"cfg.proto_mask_metric should be confidence or entropy, but got {self.cfg.proto_mask_metric}")
-
-						seg_metric = confidence if self.cfg.proto_mask_metric == "confidence" else -entropy
-						
-						if not hasattr(self, "seg_masker"):
-							self.seg_masker = SegMasker(use_history=self.cfg.proto_mask_use_history)
-							
-						self.seg_masker.add_to_buffer(seg_metric, prediction)
-						high_conf_mask = self.seg_masker.cal_mask(seg_metric, prediction, self.cfg.proto_mask_top_p)
-						masked_prediction = prediction.clone()
-						masked_prediction[~high_conf_mask] = 255
-					else:
-						masked_prediction = prediction.clone()
-
-					# Extract and combine protos
-					C, H, W = feature_map.shape
-					unique_labels = [label for label in masked_prediction.unique().tolist() if label != 255]
-					combined_protos = []
-					for label in unique_labels:
-						class_features = feature_map[:, masked_prediction == label]
-						proto_current_img = class_features.mean(dim=1)
-						
-						if label in self.protos_mean:
-							combined_protos.append(self.cfg.lambda_ * self.protos_mean[label] + (1 - self.cfg.lambda_) * proto_current_img)
-						else:
-							combined_protos.append(proto_current_img)
-
-					proto_tensor = torch.stack(combined_protos, dim=0)
-
-					# Predict using protos
-					reshaped_features = feature_map.view(C, -1).transpose(0, 1)
-					distances = torch.cdist(reshaped_features, proto_tensor)
-					_, pred_class_indices = distances.min(dim=1)
-					pred_labels = torch.tensor(unique_labels, dtype=torch.long).to(feature_map.device)
-					refined_prediction = pred_labels[pred_class_indices].view(H, W)
-
-					# Update buffer with new protos
-					for label in unique_labels:
-						class_features = feature_map[:, masked_prediction == label]
-						if label not in self.protos_mean:
-							self.protos_mean[label] = class_features.mean(dim=1)
-							self.protos_count[label] = class_features.size(1)
-						else:
-							new_count = class_features.size(1)
-							new_mean = class_features.mean(dim=1)
-							if self.cfg.rho == "count":
-								updated_mean = (self.protos_mean[label] * self.protos_count[label] + new_mean * new_count) / (self.protos_count[label] + new_count)
-								self.protos_count[label] += new_count
-							elif isinstance(self.cfg.rho, (float, int)):
-								updated_mean = self.protos_mean[label] * (1 - self.cfg.rho) + new_mean * self.cfg.rho
-								self.protos_count[label] += new_count
-							self.protos_mean[label] = updated_mean
-
-					return refined_prediction
-
 			if not hasattr(self, 'protos_classifier'):
 				self.protos_classifier = ProtoClassifier(cfg)
 			for i, d in enumerate(res):
