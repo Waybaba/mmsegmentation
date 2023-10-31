@@ -24,13 +24,15 @@ ttda_hook:
     proto_mask_use_history: false # whether top_p threshold is based on all history metric or only this img
   sam_predict:
     turn_on: ???
-    sam_ratio: 0.2 # 0.0 means no sam
-    type: logits_mask_adjust # logits_mask_adjust, sam_feats_proto
     tau: 1.0 # temperature for sam feats pseudo weights
+    type: logits_mask_adjust # logits_mask_adjust, sam_feats_proto
     use_prob: true
+    sam_ratio: 0.2 # 0.0 means no sam
+    sam_ratio_mul_conf: true # whether add confidence to sam feats
+    sam_ratio_conf_adjust: 1.0 # 0.0 all one, 1.0 linear, 100.0 all zero
   pseudo_label_loss:
     ratio: 1.0 # 0. or 1. to only adjust entropy loss
-    conf_weight_tau: -5.0 # 0.0 means average
+    conf_weight_tau: 1.0 # 0.0 all one, 1.0 linear, 100.0 all zero
     # mask_with: "ground_truth" # "pseudo_label" or "entropy" or "ground_truth"
     # mask_with_freeze: false
     # threshold: 0.9

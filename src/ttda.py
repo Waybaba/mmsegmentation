@@ -30,7 +30,7 @@ from mmseg.models import EncoderDecoder
 import torch.utils.checkpoint as cp
 import math
 EPS = 1e-10
-def quadratic_function(x, a):
+def quadratic_function(x, alpha):
     """
     Computes the value of a quadratic function that passes through points (0,0) and (1,1).
 
@@ -48,7 +48,7 @@ def quadratic_function(x, a):
     Returns:
     - float: The computed value of the function for the given 'x'.
     """
-    return a * x**2 + (1-a) * x
+    return x ** alpha
 
 @torch.no_grad()
 def sam_feats_proto_predict(sam_feats, logits, cfg):
@@ -175,6 +175,7 @@ def adjust_with_sam(logits, automask, cfg):
 	"""
 	sam_ratio = cfg.sam_ratio
 	if sam_ratio == 0.: return logits
+	conf = torch.softmax(logits, dim=0).max(dim=0)[0]
 	unique_masks = torch.unique(automask)
 	adjusted_logits = logits.clone()
 	if cfg.use_prob: adjusted_logits = torch.softmax(adjusted_logits, dim=0)
@@ -184,7 +185,13 @@ def adjust_with_sam(logits, automask, cfg):
 		mean_logits_per_channel = torch.mean(logits[:, mask_indices], dim=1, keepdim=True)  # Shape: (C, 1)
 		
 		# Use broadcasting to update the adjusted logits for the current mask
-		adjusted_logits[:, mask_indices] = (1 - sam_ratio) * logits[:, mask_indices] + sam_ratio * mean_logits_per_channel
+		if cfg.sam_ratio_mul_conf:
+			this_conf = conf[mask_indices]
+			sam_ratio_matrix = sam_ratio * quadratic_function(1-this_conf, cfg.sam_ratio_conf_adjust)
+		else:
+			sam_ratio_matrix = torch.ones_like(mean_logits_per_channel) * sam_ratio
+
+		adjusted_logits[:, mask_indices] = (1 - sam_ratio_matrix) * logits[:, mask_indices] + sam_ratio_matrix * mean_logits_per_channel
 
 	return adjusted_logits
 
