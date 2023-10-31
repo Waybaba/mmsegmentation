@@ -509,7 +509,10 @@ class EncoderDecoderWrapper(EncoderDecoder):
 				self.protos_classifier = ProtoClassifier(cfg)
 			for i, d in enumerate(res):
 				res_pred = self.protos_classifier.process_one(
-					res[i].feats.data.clone(),
+					res[i].feats.data.clone() if cfg.debug_feats == "feats" \
+					else res[i].seg_logits.data.clone() if cfg.debug_feats == "logits" \
+					else res[i].pred_sem_seg.data.clone() if cfg.debug_feats == "pred_sem_seg" \
+					else NotImplementedError(f"Unknown debug_feats: {cfg.debug_feats}"),
 					res[i].seg_logits.data.clone(),
 					res[i].pred_sem_seg.data[0].clone(),
 				)
