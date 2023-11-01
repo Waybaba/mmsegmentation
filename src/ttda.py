@@ -1630,6 +1630,13 @@ class TTDAHook(Hook):
 		runner.visualizer.add_scalars({
 			"test/"+k: v for k, v in metrics.items()
 		})
+		import wandb
+		# columns=[c[4:] for c in metrics.keys() if "IoU_" in c]
+		# wandb_table = wandb.Table(data={c[4:]: v for c, v in metrics.items() if "IoU_" in c})
+		wandb_table = wandb.Table(columns=[c[4:] for c in metrics.keys() if "IoU_" in c], data=[[v for c, v in metrics.items() if "IoU_" in c]])
+		runner.visualizer.get_backend("WandbVisBackend").experiment.log({
+			"IoU_Table": wandb_table
+		})
 
 	def after_test_iter(self, runner, batch_idx, data_batch, outputs):
 		# metrics = runner.test_evaluator.evaluate(len(runner.test_dataloader.dataset))
