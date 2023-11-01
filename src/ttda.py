@@ -408,9 +408,69 @@ class IoUMetricWrapper(IoUMetric):
 		print_log('\n' + class_table_data.get_string(), logger=logger)
 
 		# @waybaba add class IoU
+		baseline_iou = {
+			"road": 73.5,
+			"sidewalk": 18.78,
+			"building": 84.06,
+			"wall": 39.81,
+			"fence": 28.92,
+			"pole": 26.07,
+			"traffic light": 40.09,
+			"traffic sign": 17.66,
+			"vegetation": 86.02,
+			"terrain": 42.96,
+			"sky": 89.88,
+			"person": 63.22,
+			"rider": 26.73,
+			"car": 85.04,
+			"truck": 37.27,
+			"bus": 38.49,
+			"train": 36.26,
+			"motorcycle": 22.87,
+			"bicycle": 20.25
+		}
+		baseline_acc = {
+			"road": 79.34,
+			"sidewalk": 45.29,
+			"building": 94.0,
+			"wall": 51.7,
+			"fence": 40.82,
+			"pole": 28.89,
+			"traffic light": 43.85,
+			"traffic sign": 17.82,
+			"vegetation": 95.32,
+			"terrain": 60.95,
+			"sky": 96.08,
+			"person": 79.99,
+			"rider": 35.72,
+			"car": 91.19,
+			"truck": 75.47,
+			"bus": 43.87,
+			"train": 37.89,
+			"motorcycle": 53.46,
+			"bicycle": 20.94
+		}
+		segmentation_categories = {
+			"stuff": ["road", "sidewalk", "building", "wall", "vegetation", "terrain", "sky"],
+			"things": ["fence", "pole", "traffic light", "traffic sign", "person", "rider", "car", "truck", "bus", "train", "motorcycle", "bicycle"],
+			"smooth_surfaces": ["road", "car", "bus", "train", "bicycle", "motorcycle", "traffic light", "traffic sign"],
+			"rough_surfaces": ["sidewalk", "building", "wall", "fence", "terrain", "vegetation"],
+			"high_frequency_moving": ["person", "rider", "car", "truck", "bus", "bicycle", "motorcycle"],
+			"low_or_static": ["road", "sidewalk", "building", "wall", "fence", "pole", "traffic light", "traffic sign", "vegetation", "terrain", "sky", "train"],
+			"simple_structures": ["road", "sidewalk", "sky", "terrain"],
+			"medium_structures": ["wall", "fence", "pole", "traffic light", "traffic sign", "car", "truck", "bus", "train"],
+			"complex_structures": ["building", "vegetation", "person", "rider", "motorcycle", "bicycle"],
+			"large_scale": ["road", "building", "sky", "terrain", "truck", "bus", "train"],
+			"medium_scale": ["car", "vegetation", "wall"],
+			"small_scale": ["sidewalk", "fence", "pole", "traffic light", "traffic sign", "person", "rider", "motorcycle", "bicycle"],
+			"regular_shapes": ["road", "sidewalk", "building", "wall", "fence", "traffic light", "traffic sign", "car", "bus", "truck", "train"],
+			"irregular_shapes": ["vegetation", "terrain", "sky", "pole", "person", "rider", "motorcycle", "bicycle"]
+		}
 		for i, name in enumerate(class_names):
-			metrics[f"IoU_{name}"] = ret_metrics_class["IoU"][i] if not np.isnan(ret_metrics_class["IoU"][i]) else 0.
-
+			metrics[f"cls_{name}"] = ret_metrics_class["IoU"][i] - baseline_iou[name] \
+			if not np.isnan(ret_metrics_class["IoU"][i]) else 0.
+		for cls_mtd, clss in segmentation_categories.items():
+			metrics[f"group_{cls_mtd}"] = np.nanmean([metrics[f"cls_{cls}"] for cls in clss])
 		return metrics
 
 @MODELS.register_module()
