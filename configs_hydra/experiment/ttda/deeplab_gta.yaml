@@ -1,0 +1,45 @@
+# @package _global_
+
+defaults:
+- /_base_/models: deeplabv3_r50-d8.yaml
+- /_custom_/datasets: gta2cityscapes.yaml
+- /_base_/default_runtime.yaml
+- /_base_/schedules_nooptim: schedule_80k.yaml # TODO
+- optim: train.yaml
+
+
+crop_size_list_: ??? # [512, 512] or [1024, 1024] for segformer or [512, 1024] for deeplab
+
+crop_size: &id001
+  _args_:
+  - ${crop_size_list_} # e.g. [1024, 1024]
+  _target_: builtins.tuple
+
+data_preprocessor:
+  size: ${crop_size}
+# checkpoint: https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/segformer/mit_b0_20220624-7e0fe6dd.pth
+model:
+  # backbone:
+  #   init_cfg:
+  #     checkpoint: ???
+  #     type: Pretrained
+  data_preprocessor:
+    size: ${crop_size} # *id001
+  test_cfg:
+    crop_size: ${crop_size} # *id001
+    mode: whole
+
+
+# ! see optim for lr and scheduler
+train_dataloader:
+  batch_size: 2
+  num_workers: 4
+val_dataloader:
+  batch_size: 1
+  num_workers: 4
+test_dataloader:
+  batch_size: 1
+  num_workers: 4
+
+
+

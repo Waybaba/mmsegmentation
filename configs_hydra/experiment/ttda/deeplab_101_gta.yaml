@@ -1,0 +1,8 @@
+# @package _global_
+defaults:
+  - ttda/deeplab_gta.yaml
+
+model:
+  backbone:
+    depth: 101
+  pretrained: open-mmlab://resnet101_v1c
