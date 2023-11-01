@@ -22,7 +22,7 @@ ttda_hook:
     norm_feats_sim: true
     proto_mask_top_p: 0.9 # 
     proto_mask_metric: "entropy" # confidence, entropy, ground_truth, none
-    proto_mask_use_history: false # whether top_p threshold is based on all history metric or only this img
+    proto_mask_use_history: false # whether top_p threshold is based on all history metric or only this img 
   sam_predict:
     turn_on: ???
     tau: 1.0 # temperature for sam feats pseudo weights
@@ -32,7 +32,7 @@ ttda_hook:
     sam_ratio_mul_conf: true # whether add confidence to sam feats
     sam_ratio_conf_adjust: 1.0 # 0.0 all one, 1.0 linear, 100.0 all zero
   pseudo_label_loss:
-    ratio: 1.0 # 0. or 1. to only adjust entropy loss
+    ratio: 0.0 # 0. or 1. to only adjust entropy loss
     conf_weight_tau: 1.0 # 0.0 all one, 1.0 linear, 100.0 all zero
     # mask_with: "ground_truth" # "pseudo_label" or "entropy" or "ground_truth"
     # mask_with_freeze: false
@@ -47,7 +47,7 @@ ttda_hook:
     # class_balance: false
     tau: 0.0 # temperature for entropy loss # would increase the weight of confident ones
   sam_loss:
-    ratio: 0.0
+    ratio: 1.0
     strategy: "close_to_confident" # min_variance, close_to_confident
     confidence_type: "entropy" # "confidence", "entropy"
     confidence_selected_ratio: 0.1

@@ -31,7 +31,7 @@ test_dataloader:
 test_evaluator:
   iou_metrics:
   - mIoU
-  type: IoUMetric
+  type: IoUMetricWrapper
 test_pipeline:
 - type: LoadImageFromFile
 - keep_ratio: true
@@ -140,4 +140,4 @@ val_dataloader:
 val_evaluator:
   iou_metrics:
   - mIoU
-  type: IoUMetric
+  type: IoUMetricWrapper

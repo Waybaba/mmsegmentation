@@ -45,7 +45,7 @@ test_dataloader:
 test_evaluator:
   iou_metrics:
   - mIoU
-  type: IoUMetric
+  type: IoUMetricWrapper
 
 train_dataloader:
   batch_size: 2

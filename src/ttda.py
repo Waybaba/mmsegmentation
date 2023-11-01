@@ -10,7 +10,7 @@ from collections.abc import Iterable
 
 from mmengine.config import Config, DictAction
 from copy import deepcopy
-from mmseg.registry import HOOKS
+from mmseg.registry import HOOKS, METRICS
 from mmengine.model import (MMDistributedDataParallel, convert_sync_batchnorm,
 							is_model_wrapper, revert_sync_batchnorm)
 from mmengine.model.efficient_conv_bn_eval import \
@@ -20,35 +20,46 @@ from mmseg.models.utils import PatchEmbed, nchw_to_nlc, nlc_to_nchw, resize
 from functools import partial
 import utils
 from mmseg.utils.misc import add_prefix
+import os.path as osp
+from collections import OrderedDict
+from typing import Dict, List, Optional, Sequence
 
+import numpy as np
+import torch
+from mmengine.dist import is_main_process
+from mmengine.evaluator import BaseMetric
+from mmengine.logging import MMLogger, print_log
+from prettytable import PrettyTable
+logger: MMLogger = MMLogger.get_current_instance()
 
 import cv2
 from mmengine.structures import BaseDataElement, PixelData
 from mmengine.registry import MODELS
 from mmseg.models.backbones import MixVisionTransformer
+from mmseg.evaluation.metrics import IoUMetric
 from mmseg.models import EncoderDecoder
 import torch.utils.checkpoint as cp
 import math
 EPS = 1e-10
 def quadratic_function(x, alpha):
-    """
-    Computes the value of a quadratic function that passes through points (0,0) and (1,1).
+	"""
+	Computes the value of a quadratic function that passes through points (0,0) and (1,1).
 
-    This function is defined as: f(x) = ax^2 + (1-a)x
-    The shape of the curve (concave or convex) is determined by the parameter 'a'.
-    
-    Parameters:
-    - x (float): The input value for which the function value needs to be computed. 
-                 Expected to be in the range [0, 1].
-    - a (float): The parameter that controls the concavity or convexity of the function.
-                 When a > 0, the function is convex (upwards facing).
-                 When a < 0, the function is concave (downwards facing).
-                 When a = 0, the function is a straight line.
+	This function is defined as: f(x) = ax^2 + (1-a)x
+	The shape of the curve (concave or convex) is determined by the parameter 'a'.
+	
+	Parameters:
+	- x (float): The input value for which the function value needs to be computed. 
+				 Expected to be in the range [0, 1].
+	- a (float): The parameter that controls the concavity or convexity of the function.
+				 When a > 0, the function is convex (upwards facing).
+				 When a < 0, the function is concave (downwards facing).
+				 When a = 0, the function is a straight line.
 
-    Returns:
-    - float: The computed value of the function for the given 'x'.
-    """
-    return x ** alpha
+	Returns:
+	- float: The computed value of the function for the given 'x'.
+	"""
+	return x ** alpha
 
 @torch.no_grad()
 def sam_feats_proto_predict(sam_feats, logits, cfg):
@@ -347,7 +358,60 @@ def _scaled_dot_product_attention_llama_adapter(
 	output = torch.bmm(attn, v)
 	return output, attn
 
+@METRICS.register_module() # TODO import
+class IoUMetricWrapper(IoUMetric):
+	def compute_metrics(self, results: list):
+		if self.format_only:
+			logger.info(f'results are saved to {osp.dirname(self.output_dir)}')
+			return OrderedDict()
+		# convert list of tuples to tuple of lists, e.g.
+		# [(A_1, B_1, C_1, D_1), ...,  (A_n, B_n, C_n, D_n)] to
+		# ([A_1, ..., A_n], ..., [D_1, ..., D_n])
+		results = tuple(zip(*results))
+		assert len(results) == 4
 
+		total_area_intersect = sum(results[0])
+		total_area_union = sum(results[1])
+		total_area_pred_label = sum(results[2])
+		total_area_label = sum(results[3])
+		ret_metrics = self.total_area_to_metrics(
+			total_area_intersect, total_area_union, total_area_pred_label,
+			total_area_label, self.metrics, self.nan_to_num, self.beta)
+
+		class_names = self.dataset_meta['classes']
+
+		# summary table
+		ret_metrics_summary = OrderedDict({
+			ret_metric: np.round(np.nanmean(ret_metric_value) * 100, 2)
+			for ret_metric, ret_metric_value in ret_metrics.items()
+		})
+		metrics = dict()
+		for key, val in ret_metrics_summary.items():
+			if key == 'aAcc':
+				metrics[key] = val
+			else:
+				metrics['m' + key] = val
+
+		# each class table
+		ret_metrics.pop('aAcc', None)
+		ret_metrics_class = OrderedDict({
+			ret_metric: np.round(ret_metric_value * 100, 2)
+			for ret_metric, ret_metric_value in ret_metrics.items()
+		})
+		ret_metrics_class.update({'Class': class_names})
+		ret_metrics_class.move_to_end('Class', last=False)
+		class_table_data = PrettyTable()
+		for key, val in ret_metrics_class.items():
+			class_table_data.add_column(key, val)
+
+		print_log('per class results:', logger)
+		print_log('\n' + class_table_data.get_string(), logger=logger)
+
+		# @waybaba add class IoU
+		for i, name in enumerate(class_names):
+			metrics[f"IoU_{name}"] = ret_metrics_class["IoU"][i] if not np.isnan(ret_metrics_class["IoU"][i]) else 0.
+
+		return metrics
 
 @MODELS.register_module()
 class EncoderDecoderWrapper(EncoderDecoder):
