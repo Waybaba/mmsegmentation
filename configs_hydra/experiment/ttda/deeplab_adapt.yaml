@@ -19,6 +19,7 @@ data_preprocessor:
   size: ${crop_size}
 # checkpoint: https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/segformer/mit_b0_20220624-7e0fe6dd.pth
 model:
+  type: EncoderDecoderWrapper
   # backbone:
   #   init_cfg:
   #     checkpoint: ???
@@ -40,8 +41,6 @@ val_dataloader:
 test_dataloader:
   batch_size: 1
   num_workers: 4
-
-
 
 
 ttda_hook: 
@@ -148,19 +147,19 @@ load_from: ??? # ! load from mmseg model
 ### TPT
 # model:
 #   type: EncoderDecoderWrapper
-#   backbone:
-#     type: MixVisionTransformerTPT
-#     tpt_cfg:
-#       turn_on: false
-#       num_tokens: 3
-#       weight_init_type: normal # zero, normal, kv_normal, q_normal
-#       mode: llama # llama, vpt # TODO
-#     vpt_cfg:
-#       turn_on: false 
-#       type: cnn # "padding" # padding, fixed_patch, random_patch, cnn
-#       prompt_size: 3
-#       res_add: 1
-#       weight_init_type: normal # "normal" 
+  # backbone:
+  #   type: MixVisionTransformerTPT
+  #   tpt_cfg:
+  #     turn_on: false
+  #     num_tokens: 3
+  #     weight_init_type: normal # zero, normal, kv_normal, q_normal
+  #     mode: llama # llama, vpt # TODO
+  #   vpt_cfg:
+  #     turn_on: false 
+  #     type: cnn # "padding" # padding, fixed_patch, random_patch, cnn
+  #     prompt_size: 3
+  #     res_add: 1
+  #     weight_init_type: normal # "normal" 
 
 train: false
 test: true
