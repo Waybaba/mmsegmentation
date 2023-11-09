@@ -29,8 +29,12 @@ import torch
 from mmengine.dist import is_main_process
 from mmengine.evaluator import BaseMetric
 from mmengine.logging import MMLogger, print_log
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 from prettytable import PrettyTable
 logger: MMLogger = MMLogger.get_current_instance()
+from matplotlib.colors import ListedColormap
 
 import cv2
 from mmengine.structures import BaseDataElement, PixelData
@@ -40,6 +44,7 @@ from mmseg.evaluation.metrics import IoUMetric
 from mmseg.models import EncoderDecoder
 import torch.utils.checkpoint as cp
 import math
+from scipy.ndimage import label, find_objects
 EPS = 1e-10
 def quadratic_function(x, alpha):
 	"""
@@ -321,6 +326,19 @@ class ProtoClassifier:
 
 		return refined_prediction
 
+def make_grid(num=32):
+    """
+    Creates a grid of points in the range (0, 1), not including 0 and 1.
+    The grid is of shape (num*num, 2), where each row represents the (x, y)
+    coordinates of a point.
+    
+    :param num: Number of points in each dimension, excluding the boundaries.
+    :return: A NumPy array of shape (num*num, 2) with the grid points.
+    """
+    points = np.linspace(0, 1, num + 2, endpoint=False)[1:]
+    x, y = np.meshgrid(points, points)
+    grid = np.stack((x, y), axis=-1).reshape(-1, 2)
+    return grid
 
 # TODO check model.train in ttda mode
 # TODO check multi head ! I only have one head
@@ -1415,7 +1433,6 @@ class TTDAHook(Hook):
 			runner.model = param_migrate(runner.model, self.model_ema, 1.0)
 
 		# inference label
-		
 		batch_pseudoed_model = self.model_ori if self.kwargs.pseudo_use_ori \
 			else runner.model
 		batch_pseudoed = batch_pseudoed_model.test_step_plus(batch)
@@ -1645,6 +1662,164 @@ class TTDAHook(Hook):
 				feats = None
 
 		
+		# sam_model
+		if self.kwargs.sam_model.turn_on:
+			img = batch['inputs'][0].data  # tensor (CH, w, h)
+			y = batch_pseudoed[0].gt_sem_seg.data[0] # tensor (w, h)
+			seg_logits = batch_pseudoed[0].seg_logits.data  # tensor (cls, w_, h_)
+			w, h = img.shape[1:]
+
+			# reshape logits
+			seg_logits = seg_logits.unsqueeze(0)  # tensor (1, cls, w_, h_)
+			seg_logits = F.interpolate(seg_logits, size=img.shape[1:], mode='bilinear', align_corners=True)
+			y = F.interpolate(y.unsqueeze(0).unsqueeze(0).float(), size=img.shape[1:], mode='nearest').long().squeeze(0).squeeze(0)
+			seg_logits = seg_logits.squeeze(0)  # tensor (cls, w, h)
+			seg_logits = seg_logits.cpu()  # Move seg_logits to CPU
+			img = img.cpu()  # Move img to CPU
+			probs = seg_logits.softmax(0)  # tensor (cls, 512, 1024)
+			points = []
+			# find the max prob point for each class and add to points
+			for i in range(probs.shape[0]):  # iterate over each class
+				_, max_index = probs[i].view(-1).max(0)  # get the index of the max probability
+				max_point = np.unravel_index(max_index, probs[i].shape)
+				points.append(max_point)  # add to the list of points
+
+			# turn to (N, 2) array and scale the value to (0, 1)
+			def get_points_from_gt(mask):
+				""" get points from ground truth mask
+				for each patch, give the middle as the point. Note that one class could have multiple points
+				mask: (H, W) with each pixel value as class index
+				return: 
+					(N, 2) array with each row as (x, y) point
+				"""
+				from scipy.ndimage import label, distance_transform_edt
+				points = []
+				classes = np.unique(mask)
+				if 0 in classes:  # Assume 0 is the background class
+					classes = classes[1:]
+
+				for cls in classes:
+					class_mask = (mask == cls)
+					labeled_patches, num_features = label(class_mask)
+
+					for i in range(1, num_features + 1):  # Start from 1 to ignore the background
+						patch_mask = (labeled_patches == i)
+						# 1. if self.kwargs.sam_model.use_center
+						# Perform distance transform
+						# distances = distance_transform_edt(patch_mask)
+						# # Find the position of the maximum distance (center of the largest inscribed circle)
+						# max_dist_idx = np.unravel_index(np.argmax(distances), distances.shape)
+						# points.append(max_dist_idx[::-1])  # Append (y, x) to points list (need to reverse indices)
+						# 2. random select multiple based on patch size
+						PIXELS_PER_POINT = 1000
+						# count patch size (num of non-zero)
+						patch_size = np.count_nonzero(patch_mask)
+						num_points = max(patch_size // PIXELS_PER_POINT, 2)
+						# randomly select num_points
+						indices = np.where(patch_mask == 1)
+						indices = np.array(indices).T
+						np.random.shuffle(indices)
+						indices = indices[:num_points]
+						# change x,y order
+						indices = indices[:, ::-1]
+						points.extend(indices)
+
+
+				return np.array(points)
+			
+			# points = get_points_from_gt(y.cpu().numpy()) # 512, 1024 w, h
+			# points = np.array(points) / np.array([h, w]) # ! check if point ar right
+			points = make_grid(64)
+			# get first half
+			# points = points[:6]
+			
+			# points -> sam pred
+			self.mask_generator.point_grids[0] = points
+			img_np = batch['inputs'][0]
+			img_np = img_np.permute(1,2,0).numpy()
+			sam_res = self.mask_generator.generate(img_np) ### ! TODO DEBUG
+			automask_bwh = np.zeros((img_np.shape[0], img_np.shape[1]), dtype=np.uint8)
+			for i, mask in enumerate(sam_res):
+				indices = np.where(mask["segmentation"] == 1)
+				automask_bwh[indices] = i + 1
+			automask_bwh = torch.from_numpy(automask_bwh).long()
+
+			### plot
+			def mask_to_color(mask):
+				"""
+				Convert a class mask tensor to an RGB color mask using a colormap,
+				with colors represented as [0, 255] integers. 
+				ps. different class is indicated by different uint, but may not be continuous
+
+				Parameters:
+				- mask: PyTorch tensor of shape (H, W), where each entry represents a class index.
+
+				Returns:
+				- A NumPy array of shape (H, W, 3), representing RGB colors for each pixel
+				with integers in the range [0, 255].
+				"""
+				# Get unique class indices from the mask and sort them
+				unique_classes = torch.unique(mask)
+				unique_classes = unique_classes[unique_classes != 255]  # remove 255 if it's used for a special purpose like ignore_index
+
+				# Map each unique class index to a position in the range [0, number of unique classes - 1]
+				index_mapping = {int(class_idx): idx for idx, class_idx in enumerate(unique_classes)}
+
+				# Create an array of shape (num_unique_classes, 3) for RGB colors, taking modulo with a colormap size
+				colormap_size = 20  # Number of distinct colors in the colormap
+				colors = plt.cm.tab20(np.linspace(0, 1, colormap_size))
+
+				# If mask is on GPU, move to CPU and convert to numpy array
+				mask_array = mask.cpu().numpy() if mask.is_cuda else mask.numpy()
+
+				# Create an empty RGB array
+				height, width = mask_array.shape
+				color_mask = np.zeros((height, width, 3), dtype=np.uint8)
+
+				# Map each class index to its color
+				for class_idx in unique_classes:
+					mapped_index = index_mapping[int(class_idx)]
+					color = (colors[mapped_index % colormap_size][:3] * 255).astype(np.uint8)
+					color_mask[mask_array == class_idx.item()] = color
+
+				return color_mask
+			
+			def seg_plot(img, mask=None, points=None, save_path=None):
+				"""
+				Plot an image with an optional mask and points, and save to save_path if provided.
+
+				Parameters:
+				- img: A PyTorch tensor of shape (C, H, W) representing the image.
+				- mask: A PyTorch tensor of shape (H, W), where each entry represents a class index.
+				- points: A list of tuples/lists with points to plot (e.g., [(x1, y1), (x2, y2), ...]).
+				- save_path: A string representing the file path to save the image.
+				"""
+				fig, ax = plt.subplots()
+				ax.imshow(img.permute(1, 2, 0).numpy(), aspect='auto')
+				w, h = img.shape[1:]
+
+				if mask is not None:
+					color_mask = mask_to_color(mask)
+					ax.imshow(color_mask, aspect='auto', alpha=0.5)
+
+				if points is not None:
+					for point in points:
+						# ax.scatter(point[0], point[1], s=10, c='r')
+						ax.scatter(int(point[0]*h), int(point[1]*w), s=2, c='b')
+						ax.scatter(int(point[0]*h), int(point[1]*w), s=1, c='w')
+
+				if save_path:
+					plt.savefig(save_path, dpi=300)
+				plt.close(fig)
+
+			# plot img, pseudo label mask, and points
+
+			seg_plot(batch['inputs'][0], mask=y, points=points, save_path=f"./debug/{batch_idx}_gt.png")
+			seg_plot(batch['inputs'][0], mask=seg_logits.max(0)[1], points=points, save_path=f"./debug/{batch_idx}_pred.png")
+			seg_plot(batch['inputs'][0], mask=automask_bwh, points=points, save_path=f"./debug/{batch_idx}_sam.png")
+
+
+		
 		runner.visualizer.add_scalars({
 			"adapt/"+k: v.item() for k, v in log_vars.items()
 		},step=runner.iter)
@@ -1667,6 +1842,14 @@ class TTDAHook(Hook):
 			runner.model.test_step = partial(runner.model.test_step_proto_predict, cfg=self.kwargs.proto_predict)
 		elif self.kwargs.sam_predict.turn_on:
 			runner.model.test_step = partial(runner.model.test_step_sam_predict, cfg=self.kwargs.sam_predict)
+
+		# sam model load
+		if self.kwargs.sam_model.turn_on:
+			args = self.kwargs.sam_model
+			from sam.scripts.pure_model import SegmentAnythingModelWrapper
+			from sam.segment_anything import SamAutomaticMaskGenerator, sam_model_registry
+			sam_model = sam_model_registry[args.sam.model_type](checkpoint=args.sam.checkpoint)
+			self.mask_generator = SamAutomaticMaskGenerator(sam_model)
 
 	def before_test_iter(self,
 						 runner: Runner,

@@ -1,5 +1,49 @@
 # @package _global_
 
+defaults:
+- /_base_/models: deeplabv3_r50-d8.yaml
+- /_custom_/datasets: gta2cityscapes.yaml
+- /_base_/default_runtime.yaml
+- /_base_/schedules_nooptim: schedule_80k.yaml # TODO
+- optim: ttda.yaml
+
+
+crop_size_list_: ??? # [512, 512] or [1024, 1024] for segformer or [512, 1024] for deeplab
+
+crop_size: &id001
+  _args_:
+  - ${crop_size_list_} # e.g. [1024, 1024]
+  _target_: builtins.tuple
+
+data_preprocessor:
+  size: ${crop_size}
+# checkpoint: https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/segformer/mit_b0_20220624-7e0fe6dd.pth
+model:
+  # backbone:
+  #   init_cfg:
+  #     checkpoint: ???
+  #     type: Pretrained
+  data_preprocessor:
+    size: ${crop_size} # *id001
+  test_cfg:
+    crop_size: ${crop_size} # *id001
+    mode: whole
+
+
+# ! see optim for lr and scheduler
+train_dataloader:
+  batch_size: 2
+  num_workers: 4
+val_dataloader:
+  batch_size: 1
+  num_workers: 4
+test_dataloader:
+  batch_size: 1
+  num_workers: 4
+
+
+
+
 ttda_hook: 
   type: TTDAHook
   turn_on_adapt: true # for test source-only
@@ -57,21 +101,8 @@ ttda_hook:
     turn_on: false
     rho: 0.3 # how much would ema be updated each step
   sam_model:
-    turn_on: true
-    model: 
-      # _target_: sam.scripts.pure_model.SegmentAnythingModelWrapper
-      # _partial_: true
-      # model_type: vit_b
-      # checkpoint: ${oc.env:UDATADIR}/models/seg_models/segment_anything/sam_vit_b_01ec64.pth
-      model_type: vit_h
-      checkpoint: ${oc.env:UDATADIR}/models/seg_models/segment_anything/sam_vit_h_4b8939.pth
-      device: ${device}
-    sam:
-      checkpoint: ${ttda_hook.sam_model.model.checkpoint}
-      model_type: ${ttda_hook.sam_model.model.model_type}
-    # mask_generator:
-    #   _target_: sam.segment_anything.SamAutomaticMaskGenerator
-    #   _partial_: true
+    turn_on: false
+
 
   debug:
     use_mmseg_pseudo_loss: ???
@@ -115,26 +146,24 @@ load_from: ??? # ! load from mmseg model
 
 
 ### TPT
-model:
-  type: EncoderDecoderWrapper
-  backbone:
-    type: MixVisionTransformerTPT
-    tpt_cfg:
-      turn_on: false
-      num_tokens: 3
-      weight_init_type: normal # zero, normal, kv_normal, q_normal
-      mode: llama # llama, vpt # TODO
-    vpt_cfg:
-      turn_on: false 
-      type: cnn # "padding" # padding, fixed_patch, random_patch, cnn
-      prompt_size: 3
-      res_add: 1
-      weight_init_type: normal # "normal" 
 # model:
-#   test_cfg:
-#     mode: slide
+#   type: EncoderDecoderWrapper
+#   backbone:
+#     type: MixVisionTransformerTPT
+#     tpt_cfg:
+#       turn_on: false
+#       num_tokens: 3
+#       weight_init_type: normal # zero, normal, kv_normal, q_normal
+#       mode: llama # llama, vpt # TODO
+#     vpt_cfg:
+#       turn_on: false 
+#       type: cnn # "padding" # padding, fixed_patch, random_patch, cnn
+#       prompt_size: 3
+#       res_add: 1
+#       weight_init_type: normal # "normal" 
 
 train: false
 test: true
 tags: [ttda_debug]
 task_name: MMSEG
+
