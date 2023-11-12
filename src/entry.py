@@ -71,7 +71,11 @@ def main(cfg):
     cfg = Config(cfg) # mmcv cfg
     
     link_output(cfg)
-
+    
+    # set tta
+    if hasattr(cfg, "tta") and cfg.tta:
+        cfg.test_dataloader.dataset.pipeline = cfg.tta_pipeline # the following two is commeted, since I would like to handle this in the original function. see utils/test.py for original setting
+    
     # build the runner from config
     if 'runner_type' not in cfg:
         # build the default runner
@@ -84,7 +88,8 @@ def main(cfg):
     # start training
     if cfg.train:  runner.train()
     if cfg.test:  metrics = runner.test()
-    
+
+
     wandb.finish()
 
 if __name__ == "__main__":

@@ -60,8 +60,8 @@ class CityscapesDataset(BaseSegDataset):
 
 	def __getitem__(self, idx: int) -> dict:
 		res = super().__getitem__(idx)
-		res = self.add_automask(res)
-		res = self.add_sam_feats(res)
+		# res = self.add_automask(res) # ! @waybaba no more use fixed data, we use model to online predict now
+		# res = self.add_sam_feats(res)
 		return res
 
 	def add_automask(self, res):

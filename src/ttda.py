@@ -35,7 +35,7 @@ import matplotlib.pyplot as plt
 from prettytable import PrettyTable
 logger: MMLogger = MMLogger.get_current_instance()
 from matplotlib.colors import ListedColormap
-
+from mmengine.model import BaseTTAModel
 import cv2
 from mmengine.structures import BaseDataElement, PixelData
 from mmengine.registry import MODELS
@@ -227,6 +227,18 @@ def param_migrate(base, tgt, rho):
 			)
 	return base
 
+def aug_to_first(data):
+	""" get one from augs
+	we need aug_test to give variants of data, but we only use one for inference
+	first one is ori size, no flip
+	ps. the original implementation would use a tta_model wrapper to handle this and merge all preds,
+	but this would put another wrapper on the model class, I dont want it, so I just modify the test_step functions.
+	"""
+	if isinstance(data['inputs'][0], tuple):
+		data = {k: v[0] for k, v in data.items()}
+	return data
+
+
 class ProtoClassifier:
 	"""
 		cfg: 
@@ -327,18 +339,18 @@ class ProtoClassifier:
 		return refined_prediction
 
 def make_grid(num=32):
-    """
-    Creates a grid of points in the range (0, 1), not including 0 and 1.
-    The grid is of shape (num*num, 2), where each row represents the (x, y)
-    coordinates of a point.
-    
-    :param num: Number of points in each dimension, excluding the boundaries.
-    :return: A NumPy array of shape (num*num, 2) with the grid points.
-    """
-    points = np.linspace(0, 1, num + 2, endpoint=False)[1:]
-    x, y = np.meshgrid(points, points)
-    grid = np.stack((x, y), axis=-1).reshape(-1, 2)
-    return grid
+	"""
+	Creates a grid of points in the range (0, 1), not including 0 and 1.
+	The grid is of shape (num*num, 2), where each row represents the (x, y)
+	coordinates of a point.
+	
+	:param num: Number of points in each dimension, excluding the boundaries.
+	:return: A NumPy array of shape (num*num, 2) with the grid points.
+	"""
+	points = np.linspace(0, 1, num + 2, endpoint=False)[1:]
+	x, y = np.meshgrid(points, points)
+	grid = np.stack((x, y), axis=-1).reshape(-1, 2)
+	return grid
 
 # TODO check model.train in ttda mode
 # TODO check multi head ! I only have one head
@@ -514,6 +526,7 @@ class EncoderDecoderWrapper(EncoderDecoder):
 		Returns:
 			list: The predictions of given data.
 		"""
+		data = aug_to_first(data)
 		data = self.data_preprocessor(data, False)
 		return self._run_forward(data, mode='predict')  # type: ignore
 
@@ -644,6 +657,7 @@ class EncoderDecoderWrapper(EncoderDecoder):
 		TODO 255 class hwo to handle
 		here, cfg is set by partial at init stage of runner
 		"""
+		data = aug_to_first(data)
 		data = self.data_preprocessor(data, False)
 		res = self._run_forward_plus(data, mode='predict')  # type: ignore
 		if cfg.turn_on:
@@ -667,6 +681,7 @@ class EncoderDecoderWrapper(EncoderDecoder):
 		TODO 255 class hwo to handle
 		here, cfg is set by partial at init stage of runner
 		"""
+		data = aug_to_first(data)
 		data = self.data_preprocessor(data, False)
 		res = self._run_forward_plus(data, mode='predict')  # type: ignore
 		for i, d in enumerate(res):
@@ -687,6 +702,7 @@ class EncoderDecoderWrapper(EncoderDecoder):
 	def test_step_sam_model_predict(self, data, mask_generator=None, cfg=None):
 		""" use sam_model to generate automask with indication points
 		"""
+		data = aug_to_first(data)
 		imgs = deepcopy(data['inputs'])
 		data = self.data_preprocessor(data, False)
 		self.mask_generator = mask_generator
@@ -697,11 +713,13 @@ class EncoderDecoderWrapper(EncoderDecoder):
 			logits = res[i].seg_logits.data
 			seg_logits = logits
 			y = res[i].gt_sem_seg.data[0]
+			pred_raw = res[i].pred_sem_seg.data[0]
 			size_ori = y.shape
 			# reshape logits
 			seg_logits = seg_logits.unsqueeze(0)  # tensor (1, cls, w_, h_)
 			seg_logits = F.interpolate(seg_logits, size=img.shape[1:], mode='bilinear', align_corners=True)
 			y = F.interpolate(y.unsqueeze(0).unsqueeze(0).float(), size=img.shape[1:], mode='nearest').long().squeeze(0).squeeze(0)
+			pred_raw = F.interpolate(pred_raw.unsqueeze(0).unsqueeze(0).float(), size=img.shape[1:], mode='nearest').long().squeeze(0).squeeze(0)
 			seg_logits = seg_logits.squeeze(0)  # tensor (cls, w, h)
 			seg_logits = seg_logits.cpu()  # Move seg_logits to CPU
 			img = img.cpu()  # Move img to CPU
@@ -798,7 +816,8 @@ class EncoderDecoderWrapper(EncoderDecoder):
 				
 				return pred_mask
 			
-			sam_pred = automask_to_pred(automask_bwh.clone().to(y.device), y) # w, h
+			# sam_pred = automask_to_pred(automask_bwh.clone().to(y.device), y) # use gt
+			sam_pred = automask_to_pred(automask_bwh.clone().to(y.device), pred_raw) # use pred
 			res[i].pred_sem_seg.data = F.interpolate(sam_pred.unsqueeze(0).unsqueeze(0).float(), size=size_ori, mode='nearest').long().squeeze(0)
 
 			# plot img, pseudo label mask, and points
@@ -816,7 +835,7 @@ class EncoderDecoderWrapper(EncoderDecoder):
 				with integers in the range [0, 255].
 				"""
 				# Get unique class indices from the mask and sort them
-				mask = torch.tensor(mask)
+				mask = mask.clone().detach()
 				unique_classes = torch.unique(mask)
 				unique_classes = unique_classes[unique_classes != 255]  # remove 255 if it's used for a special purpose like ignore_index
 
@@ -872,7 +891,9 @@ class EncoderDecoderWrapper(EncoderDecoder):
 
 			seg_plot(imgs[i], mask=y.cpu(), points=points, save_path=f"./debug/_gt.png")
 			seg_plot(imgs[i], mask=seg_logits.max(0)[1].cpu(), points=points, save_path=f"./debug/_pred.png")
-			seg_plot(imgs[i], mask=automask_bwh, points=points, save_path=f"./debug/_sam.png")
+			seg_plot(imgs[i], mask=automask_bwh, points=points, save_path=f"./debug/_sam_automask.png")
+			seg_plot(imgs[i], mask=sam_pred, points=points, save_path=f"./debug/_sam_pred.png")
+			
 
 		return res
 
@@ -885,6 +906,7 @@ class EncoderDecoderWrapper(EncoderDecoder):
 		Returns:
 			list: The predictions of given data.
 		"""
+		data = aug_to_first(data)
 		data = self.data_preprocessor(data, False)
 		return self._run_forward_plus(data, mode='predict')  # type: ignore
 
@@ -1113,6 +1135,8 @@ class EncoderDecoderWrapper(EncoderDecoder):
 		seg_logits = self.decode_head.predict_by_feat(seg_logits, batch_img_metas)
 
 		return seg_logits, feats
+
+	# utils
 
 # ! TODO when use normal init, would cause pseudo label become unaccurate
 @MODELS.register_module()
@@ -1409,8 +1433,6 @@ class MixVisionTransformerTPT(MixVisionTransformer):
 			identity = x
 		return identity + model.dropout_layer(out)
 
-
-
 class SegValueTrans:
 	"""
 	turn img size value to seg for crop
@@ -1497,6 +1519,17 @@ class SegMasker:
 			mask[(seg_pred == cls) & (seg_metric >= threshold)] = True  # Only change the mask where condition is met
 		return mask
 
+
+def is_deeplab(model):
+	""" TODO not sure if this is the best way to check
+	"""
+	m = model.module if hasattr(model, "module") else model
+	if m.backbone.__class__.__name__ == "MixVisionTransformerTPT":
+		return False
+	elif m.backbone.__class__.__name__ == "MixVisionTransformerTPT":
+		raise NotImplementedError(f"unknown backbone {m.backbone.__class__.__name__}")
+	else:
+		raise NotImplementedError(f"unknown backbone {m.backbone.__class__.__name__}")
 
 # main
 
@@ -1607,48 +1640,99 @@ class TTDAHook(Hook):
 					scale_factor:
 				}
 		"""
-		IS_DEEPLAB = not hasattr(runner.model.decode_head, "convs")
-		# init
+		IS_DEEPLAB = is_deeplab(runner.model)
+		
+		### init
+		to_logs = {}
 		if not self.kwargs.turn_on_adapt: return
 		use_pseudo_label = self.kwargs.use_pseudo_label
-		assert len(batch["inputs"]) == 1, "only support batch_size=1"
-		inputs, data_samples = batch["inputs"], batch["data_samples"]
+		# inputs, data_samples = batch["inputs"], batch["data_samples"]
 		if not hasattr(self, "model_ori"): # source model for pseudo
 			assert batch_idx == 0, "model_ori should be init only once"
 			self.model_ori = deepcopy(runner.model)
+		batch_noaug = deepcopy(aug_to_first(batch))
+
+		### ema model
+		# 1. update ema
+		# 2. take model back to ema
 		if self.kwargs.ema.turn_on:
-			if not hasattr(self, "model_ema"): # target model for pseudo
+			if not hasattr(self, "model_ema"): # init self.model_ema
 				self.model_ema = deepcopy(runner.model)
 				for param in self.model_ema.parameters():
 					param.detach_()
 					param.requires_grad = False
-			# back to ema
-			runner.model = param_migrate(runner.model, self.model_ema, 1.0)
+			self.model_ema = param_migrate(self.model_ema, runner.model, self.kwargs.ema.rho) # update ema
+			runner.model = param_migrate(runner.model, self.model_ema, 1.0) # model to ema
 
-		# inference label
-		batch_pseudoed_model = self.model_ori if self.kwargs.pseudo_use_ori \
-			else runner.model
-		batch_pseudoed = batch_pseudoed_model.test_step(batch) if IS_DEEPLAB \
-			else batch_pseudoed_model.test_step_plus(batch)
+		### pseudo label
+		# -> batch_pseudoed
+		# -> hign_conf_mask (then mask to batch_pseudoed)
+		if True:
+			batch_pseudoed_model = self.model_ori if self.kwargs.pseudo_use_ori else runner.model
+			with torch.no_grad():
+				batch_pseudoed = batch_pseudoed_model.test_step(batch_noaug) if IS_DEEPLAB else batch_pseudoed_model.test_step_plus(batch_noaug)
+			if self.kwargs.high_conf_mask.turn_on:
+				if batch_idx == 0: 
+					assert not hasattr(self, "seg_masker"), "seg_masker should not be init twice"
+					self.seg_masker = SegMasker(use_history=self.kwargs.high_conf_mask.use_history)
+				seg_conf = F.softmax(batch_pseudoed[0].seg_logits.data, dim=0).max(0)[0]
+				self.seg_masker.add_to_buffer(seg_conf, batch_pseudoed[0].pred_sem_seg.data[0])
+				hign_conf_mask = self.seg_masker.cal_mask(
+					seg_conf,
+					batch_pseudoed[0].pred_sem_seg.data[0],
+					self.kwargs.high_conf_mask.top_p
+				)
+				# TODO log conf mask iou with correct prediction (ignore 255)
+				conf_mask = hign_conf_mask & (batch_pseudoed[0].gt_sem_seg.data[0] != 255)
+				right_mask = (batch_pseudoed[0].gt_sem_seg.data[0] == batch_pseudoed[0].pred_sem_seg.data[0]) & (batch_pseudoed[0].gt_sem_seg.data[0] != 255)
+				to_logs["conf_iou"] = (conf_mask & right_mask).sum() / (conf_mask | right_mask).sum()
+				to_logs["conf_TP"] = (conf_mask & right_mask).sum() / conf_mask.sum()
+				### DAT variance
+				if True: # TODO check batch is TTA
+					augmented_data = batch
+					def compute_var_mask(batch, batch_pseudoed_model, self_kwargs):
+						"""
+						Computes the variance mask (var_mask) for augmented data.
 
-		if self.kwargs.high_conf_mask.turn_on:
-			if batch_idx == 0: 
-				assert not hasattr(self, "seg_masker"), "seg_masker should not be init twice"
-				self.seg_masker = SegMasker(use_history=self.kwargs.high_conf_mask.use_history)
-			seg_conf = F.softmax(batch_pseudoed[0].seg_logits.data, dim=0).max(0)[0]
-			self.seg_masker.add_to_buffer(seg_conf, batch_pseudoed[0].pred_sem_seg.data[0])
-			hign_conf_mask = self.seg_masker.cal_mask(
-				seg_conf,
-				batch_pseudoed[0].pred_sem_seg.data[0],
-				self.kwargs.high_conf_mask.top_p
-			)
-			sem_seg_ = batch_pseudoed[0].pred_sem_seg.data[0]
-			sem_seg_[~hign_conf_mask] = 255
-			batch_pseudoed[0].pred_sem_seg = PixelData()
-			batch_pseudoed[0].pred_sem_seg.data = sem_seg_.unsqueeze(0)
+						Parameters:
+						- batch: The input batch data.
+						- batch_pseudoed_model: The model used for predictions.
+						- self_kwargs: Additional arguments, including 'high_conf_mask.top_p'.
 
-		# set data_batch_for_adapt for train
+						Returns:
+						- var_mask: The computed variance mask.
+						"""
+						import gc
+						with torch.no_grad():
+							augmented_data = batch
+							num_augmentations = len(augmented_data[next(iter(augmented_data))])
+							aug_data_list = [{k: v[idx] for k, v in augmented_data.items()} for idx in range(num_augmentations)]
+
+							predictions = [batch_pseudoed_model.test_step_plus(data) for data in aug_data_list]
+							softmax_probs = [F.softmax(pred[0].seg_logits.data, dim=0) for pred in predictions] # [(cls,h,w)]
+							softmax_probs = torch.stack(softmax_probs) # (num_aug, cls, h, w)
+							variance = softmax_probs.var(dim=0) # (cls, h, w)
+							variance = variance.sum(dim=0) # (h, w)
+							var_mask = variance < variance.quantile(self_kwargs.high_conf_mask.top_p)
+							# Clean up
+							del aug_data_list, predictions, softmax_probs, variance
+							gc.collect()
+							torch.cuda.empty_cache()
+							return var_mask
+					var_mask = compute_var_mask(batch, batch_pseudoed_model, self.kwargs)
+					conf_mask = var_mask & (batch_pseudoed[0].gt_sem_seg.data[0] != 255)
+					right_mask = (batch_pseudoed[0].gt_sem_seg.data[0] == batch_pseudoed[0].pred_sem_seg.data[0]) & (batch_pseudoed[0].gt_sem_seg.data[0] != 255)
+					to_logs["conf_var_iou"] = (conf_mask & right_mask).sum() / (conf_mask | right_mask).sum()
+					to_logs["conf_var_TP"] = (conf_mask & right_mask).sum() / conf_mask.sum()
+				# apply mask
+				sem_seg_ = batch_pseudoed[0].pred_sem_seg.data[0]
+				sem_seg_[~hign_conf_mask] = 255
+				batch_pseudoed[0].pred_sem_seg = PixelData()
+				batch_pseudoed[0].pred_sem_seg.data = sem_seg_.unsqueeze(0)
+		### choose adapt
+		# set data_batch_for_adapt
 		if self.kwargs.slide_adapt:
+			raise ValueError(f"slide_adapt is not implemented")
 			batch_pseudoed_slided = {"inputs": [], "data_samples": []}
 			batch_slided = {"inputs": [], "data_samples": []}
 			st = SegValueTrans(data_samples[0].img_shape, data_samples[0].ori_shape)
@@ -1690,15 +1774,13 @@ class TTDAHook(Hook):
 					batch_slided['data_samples'].append(meta_this) # 
 					batch_pseudoed_slided['inputs'].append(crop_img)
 					batch_pseudoed_slided['data_samples'].append(meta_pseudoed_this)
-		
-		### choose adapt
 		if self.kwargs.slide_adapt:
 			data_batch_for_adapt = deepcopy(batch_pseudoed_slided) \
 				if use_pseudo_label else deepcopy(batch_slided)
 		else:
-			data_batch_for_adapt = deepcopy(batch)
+			data_batch_for_adapt = batch_noaug
 			if use_pseudo_label:
-				for i in range(len(data_samples)):
+				for i in range(len(data_batch_for_adapt["data_samples"])):
 					data_batch_for_adapt["data_samples"][i].gt_sem_seg = batch_pseudoed[i].pred_sem_seg
 		data_batch_for_adapt_bak = deepcopy(data_batch_for_adapt)
 
@@ -1787,20 +1869,18 @@ class TTDAHook(Hook):
 							seg_logits,
 							self.kwargs.sam_loss
 						) * self.kwargs.sam_loss.ratio
-
-
+					
 					losses = add_prefix(losses, 'decode')
 
+
 				if model.with_auxiliary_head: assert NotImplementedError("see the class function for this branch")
+				if losses:
+					parsed_losses, log_vars = model.parse_losses(losses)  # sum all element with loss in
+					to_logs.update(log_vars)
+					optim_wrapper.update_params(parsed_losses)
 
-			parsed_losses, log_vars = model.parse_losses(losses)  # sum all element with loss in
-			optim_wrapper.update_params(parsed_losses)
 
-		# update ema 
-		if self.kwargs.ema.turn_on:
-			self.model_ema = param_migrate(self.model_ema, runner.model, self.kwargs.ema.rho)
-
-		# draw
+		### draw
 		if self.every_n_inner_iters(batch_idx, self.kwargs.adapt_img_vis_freq):
 			# train sample
 			for i, output in enumerate(data_batch_for_adapt["data_samples"]):
@@ -1829,28 +1909,28 @@ class TTDAHook(Hook):
 					draw_pred=False
 					)
 			# sam
-			for i, output in enumerate(data_batch_for_adapt["data_samples"]):
-				size_ = output.gt_sem_seg.shape # (1024, 1024) # ! note w,h order
-				img = data_batch_for_adapt_bak["inputs"][i] # tensor (3, H, W)
+			if hasattr(data_batch_for_adapt["data_samples"][0], "automask"):
+				for i, output in enumerate(data_batch_for_adapt["data_samples"]):
+					size_ = output.gt_sem_seg.shape # (1024, 1024) # ! note w,h order
+					img = data_batch_for_adapt_bak["inputs"][i] # tensor (3, H, W)
+					img = img.float()
+					img = F.interpolate(img.unsqueeze(0), size=(size_[0], size_[1]), mode='bilinear', align_corners=True)
+					img = (img).byte()
+					img = img.squeeze(0).cpu().numpy().transpose(1, 2, 0)
 
-				img = img.float()
-				img = F.interpolate(img.unsqueeze(0), size=(size_[0], size_[1]), mode='bilinear', align_corners=True)
-				img = (img).byte()
-				img = img.squeeze(0).cpu().numpy().transpose(1, 2, 0)
+					output_ = deepcopy(output)
+					output_.gt_sem_seg.data = output.automask.data
 
-				output_ = deepcopy(output)
-				output_.gt_sem_seg.data = output.automask.data
-
-				if img.shape[-1] == 3:
-					img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-				runner.visualizer.add_datasample(
-					f"adapt/automask_sam_{i}",
-					img,
-					data_sample=output_,
-					show=False,
-					step=runner.iter,
-					draw_pred=False
-					)
+					if img.shape[-1] == 3:
+						img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+					runner.visualizer.add_datasample(
+						f"adapt/automask_sam_{i}",
+						img,
+						data_sample=output_,
+						show=False,
+						step=runner.iter,
+						draw_pred=False
+						)
 			# draw tsne
 			for i, output in enumerate(data_batch_for_adapt["data_samples"]):
 				size_ = output.gt_sem_seg.shape
@@ -2015,9 +2095,9 @@ class TTDAHook(Hook):
 
 		
 		runner.visualizer.add_scalars({
-			"adapt/"+k: v.item() for k, v in log_vars.items()
+			"adapt/"+k: v.item() for k, v in to_logs.items()
 		},step=runner.iter)
-		dict_log = {k: "{:.2f}".format(v.item()) for k, v in log_vars.items()}
+		dict_log = {k: "{:.2f}".format(v.item()) for k, v in to_logs.items()}
 		runner.logger.info(f"log_vars: {dict_log}")
 
 	### hooks
@@ -2042,7 +2122,11 @@ class TTDAHook(Hook):
 			args = self.kwargs.sam_model
 			sam_model = sam_model_registry[args.sam.model_type](checkpoint=args.sam.checkpoint)
 			self.mask_generator = SamAutomaticMaskGenerator(sam_model)
-			runner.model.test_step = partial(runner.model.test_step_sam_model_predict, mask_generator=self.mask_generator, cfg=self.kwargs.sam_model)
+			if isinstance(runner.model, SegTTAModelWrapper):
+				runner.model.module.test_step = partial(runner.model.module.test_step_sam_model_predict, mask_generator=self.mask_generator, cfg=self.kwargs.sam_model)
+			elif isinstance(runner.model, EncoderDecoderWrapper):
+				runner.model.test_step = partial(runner.model.test_step_sam_model_predict, mask_generator=self.mask_generator, cfg=self.kwargs.sam_model)
+			else: raise NotImplementedError("only support SegTTAModelWrapper and EncoderDecoderWrapper")
 
 	def before_test_iter(self,
 						 runner: Runner,

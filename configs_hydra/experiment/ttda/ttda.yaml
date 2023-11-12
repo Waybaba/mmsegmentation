@@ -47,7 +47,7 @@ ttda_hook:
     # class_balance: false
     tau: 0.0 # temperature for entropy loss # would increase the weight of confident ones
   sam_loss:
-    ratio: 1.0
+    ratio: 0.0
     strategy: "close_to_confident" # min_variance, close_to_confident
     confidence_type: "entropy" # "confidence", "entropy"
     confidence_selected_ratio: 0.1
@@ -55,7 +55,7 @@ ttda_hook:
     ratio: 0.0
   ema:
     turn_on: false
-    rho: 0.3 # how much would ema be updated each step
+    rho: 0.01 # how much would ema be updated each step
   sam_model:
     turn_on: true
     model: 
