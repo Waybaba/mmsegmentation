@@ -9,8 +9,9 @@ ttda_hook:
   slide_adapt: ???
   high_conf_mask:
     turn_on: ???
-    metric: confidence # TODO to implement
-    use_history: true
+    metric: uncertainty # confidence, uncertainty
+    class_specific: false # mask globally or class-specific
+    use_history: false # TODO change to float
     top_p: 0.5 # only keep top_p pixels, others set to 255
   proto_predict:
     turn_on: ???

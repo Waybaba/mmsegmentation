@@ -1474,9 +1474,10 @@ class SegMasker:
 		# TODO if buffer is to long, half it by only keep the even index'
 		# TODO for cases where no class in buffer
 	"""
-	def __init__(self, use_history):
+	def __init__(self, use_history, class_specific):
 		self.buffer = {}
 		self.use_history = use_history
+		self.class_specific = class_specific
 
 	def add_to_buffer(self, seg_metric, seg_pred):
 		""" 
@@ -1488,18 +1489,26 @@ class SegMasker:
 			if use time as indication, the rare class would be updated too frequently
 		"""
 		SIZE_RATIO = 500
-		for cls in seg_pred.unique():
-			if cls.item() == 255:  # Skip the reserved value
-				continue
-			if cls.item() not in self.buffer:
-				self.buffer[cls.item()] = []
-			# Get confidences for pixels where the prediction matches the current class
-			cls_confs = seg_metric[seg_pred == cls].flatten().tolist()
-			### TODO partial
-			while len(cls_confs) > 1000: cls_confs = cls_confs[::2]
-			self.buffer[cls.item()].extend(cls_confs)
-			while len(self.buffer[cls.item()]) > 1000*SIZE_RATIO: 
-				self.buffer[cls.item()] = self.buffer[cls.item()][::2]
+		if self.class_specific:
+			for cls in seg_pred.unique():
+				if cls.item() == 255:  # Skip the reserved value
+					continue
+				if cls.item() not in self.buffer:
+					self.buffer[cls.item()] = []
+				# Get confidences for pixels where the prediction matches the current class
+				cls_confs = seg_metric[seg_pred == cls].flatten().tolist()
+				### TODO partial
+				while len(cls_confs) > 1000: cls_confs = cls_confs[::2]
+				self.buffer[cls.item()].extend(cls_confs)
+				while len(self.buffer[cls.item()]) > 1000*SIZE_RATIO: 
+					self.buffer[cls.item()] = self.buffer[cls.item()][::2]
+		else:
+			# Global buffer handling
+			confs = seg_metric.flatten().tolist()
+			while len(confs) > 1000: confs = confs[::2]
+			self.buffer.setdefault("global", []).extend(confs)
+			while len(self.buffer["global"]) > 1000 * SIZE_RATIO: 
+				self.buffer["global"] = self.buffer["global"][::2]
 		
 	def cal_mask(self, seg_metric, seg_pred, top_p):
 		"""
@@ -1507,16 +1516,28 @@ class SegMasker:
 		cal top_p percent
 		"""
 		mask = torch.zeros_like(seg_metric, dtype=torch.bool)
-		for cls, confs in self.buffer.items():
-			if not confs:  # if no confidences stored for this class, skip
-				continue
+		if self.class_specific:
+			mask = torch.zeros_like(seg_metric, dtype=torch.bool)
+			for cls, confs in self.buffer.items():
+				if not confs:  # if no confidences stored for this class, skip
+					continue
+				if self.use_history:
+					all_confs = torch.tensor(confs).flatten()
+				else:
+					all_confs = seg_metric[seg_pred == cls].flatten()
+				if all_confs.numel() == 0: continue
+				threshold = all_confs.quantile(1-top_p)  # Notice that it's now `top_p` directly as we're marking high confidences
+				mask[(seg_pred == cls) & (seg_metric >= threshold)] = True  # Only change the mask where condition is met
+		else:
+			# Global mask computation
 			if self.use_history:
-				all_confs = torch.tensor(confs).flatten()
+				all_confs = torch.tensor(self.buffer.get("global", [])).flatten()
 			else:
-				all_confs = seg_metric[seg_pred == cls].flatten()
-			if all_confs.numel() == 0: continue
-			threshold = all_confs.quantile(1-top_p)  # Notice that it's now `top_p` directly as we're marking high confidences
-			mask[(seg_pred == cls) & (seg_metric >= threshold)] = True  # Only change the mask where condition is met
+				all_confs = seg_metric.flatten()
+			if all_confs.numel() > 0:
+				threshold = all_confs.quantile(1 - top_p)
+				mask[seg_metric >= threshold] = True
+
 		return mask
 
 
@@ -1530,6 +1551,14 @@ def is_deeplab(model):
 		raise NotImplementedError(f"unknown backbone {m.backbone.__class__.__name__}")
 	else:
 		raise NotImplementedError(f"unknown backbone {m.backbone.__class__.__name__}")
+
+def is_tta(data):
+	""" check if the data is tta format
+	"""
+	if isinstance(data['inputs'][0], tuple):
+		return True
+	else:
+		return False
 
 # main
 
@@ -1641,6 +1670,7 @@ class TTDAHook(Hook):
 				}
 		"""
 		IS_DEEPLAB = is_deeplab(runner.model)
+		IS_TTA = is_tta(batch)
 		
 		### init
 		to_logs = {}
@@ -1674,25 +1704,21 @@ class TTDAHook(Hook):
 			if self.kwargs.high_conf_mask.turn_on:
 				if batch_idx == 0: 
 					assert not hasattr(self, "seg_masker"), "seg_masker should not be init twice"
-					self.seg_masker = SegMasker(use_history=self.kwargs.high_conf_mask.use_history)
-				seg_conf = F.softmax(batch_pseudoed[0].seg_logits.data, dim=0).max(0)[0]
-				self.seg_masker.add_to_buffer(seg_conf, batch_pseudoed[0].pred_sem_seg.data[0])
-				hign_conf_mask = self.seg_masker.cal_mask(
-					seg_conf,
-					batch_pseudoed[0].pred_sem_seg.data[0],
-					self.kwargs.high_conf_mask.top_p
-				)
-				# TODO log conf mask iou with correct prediction (ignore 255)
-				conf_mask = hign_conf_mask & (batch_pseudoed[0].gt_sem_seg.data[0] != 255)
-				right_mask = (batch_pseudoed[0].gt_sem_seg.data[0] == batch_pseudoed[0].pred_sem_seg.data[0]) & (batch_pseudoed[0].gt_sem_seg.data[0] != 255)
-				to_logs["conf_iou"] = (conf_mask & right_mask).sum() / (conf_mask | right_mask).sum()
-				to_logs["conf_TP"] = (conf_mask & right_mask).sum() / conf_mask.sum()
-				### DAT variance
-				if True: # TODO check batch is TTA
+					self.seg_masker = SegMasker(use_history=self.kwargs.high_conf_mask.use_history, class_specific=self.kwargs.high_conf_mask.class_specific)
+				if self.kwargs.high_conf_mask.metric == "confidence":
+					seg_conf = F.softmax(batch_pseudoed[0].seg_logits.data, dim=0).max(0)[0]
+					self.seg_masker.add_to_buffer(seg_conf, batch_pseudoed[0].pred_sem_seg.data[0])
+					hign_conf_mask = self.seg_masker.cal_mask(
+						seg_conf,
+						batch_pseudoed[0].pred_sem_seg.data[0],
+						self.kwargs.high_conf_mask.top_p,
+					)
+				elif self.kwargs.high_conf_mask.metric == "uncertainty":
+					assert IS_TTA, "uncertainty only support tta"
 					augmented_data = batch
 					def compute_var_mask(batch, batch_pseudoed_model, self_kwargs):
 						"""
-						Computes the variance mask (var_mask) for augmented data.
+						Computes the variance mask (var_mask) for augmented data, either globally or class-specific.
 
 						Parameters:
 						- batch: The input batch data.
@@ -1704,26 +1730,48 @@ class TTDAHook(Hook):
 						"""
 						import gc
 						with torch.no_grad():
+							# Data preparation
 							augmented_data = batch
 							num_augmentations = len(augmented_data[next(iter(augmented_data))])
 							aug_data_list = [{k: v[idx] for k, v in augmented_data.items()} for idx in range(num_augmentations)]
 
+							# Predictions
 							predictions = [batch_pseudoed_model.test_step_plus(data) for data in aug_data_list]
-							softmax_probs = [F.softmax(pred[0].seg_logits.data, dim=0) for pred in predictions] # [(cls,h,w)]
-							softmax_probs = torch.stack(softmax_probs) # (num_aug, cls, h, w)
-							variance = softmax_probs.var(dim=0) # (cls, h, w)
-							variance = variance.sum(dim=0) # (h, w)
-							var_mask = variance < variance.quantile(self_kwargs.high_conf_mask.top_p)
+							softmax_probs = [F.softmax(pred[0].seg_logits.data, dim=0) for pred in predictions]  # [(cls,h,w)]
+							softmax_probs = torch.stack(softmax_probs)  # (num_aug, cls, h, w)
+
+							# Compute variance & mask
+							if self_kwargs.high_conf_mask.class_specific:
+								var_masks = []
+								for c in range(softmax_probs.size(1)):  # Iterate over each class
+									class_variance = softmax_probs[:, c].var(dim=0)  # Variance for each class
+									class_specific_threshold = class_variance.quantile(self_kwargs.high_conf_mask.top_p)
+									class_var_mask = class_variance < class_specific_threshold
+									var_masks.append(class_var_mask)
+								var_mask = torch.stack(var_masks).any(dim=0)  # Combine class-specific masks
+							else:
+								variance = softmax_probs.var(dim=0).sum(dim=0)  # Global variance
+								var_mask = variance < variance.quantile(self_kwargs.high_conf_mask.top_p)
+
 							# Clean up
 							del aug_data_list, predictions, softmax_probs, variance
 							gc.collect()
 							torch.cuda.empty_cache()
+
 							return var_mask
-					var_mask = compute_var_mask(batch, batch_pseudoed_model, self.kwargs)
-					conf_mask = var_mask & (batch_pseudoed[0].gt_sem_seg.data[0] != 255)
-					right_mask = (batch_pseudoed[0].gt_sem_seg.data[0] == batch_pseudoed[0].pred_sem_seg.data[0]) & (batch_pseudoed[0].gt_sem_seg.data[0] != 255)
-					to_logs["conf_var_iou"] = (conf_mask & right_mask).sum() / (conf_mask | right_mask).sum()
-					to_logs["conf_var_TP"] = (conf_mask & right_mask).sum() / conf_mask.sum()
+					
+					hign_conf_mask = compute_var_mask(batch, batch_pseudoed_model, self.kwargs)
+					# conf_mask = var_mask & (batch_pseudoed[0].gt_sem_seg.data[0] != 255)
+					# right_mask = (batch_pseudoed[0].gt_sem_seg.data[0] == batch_pseudoed[0].pred_sem_seg.data[0]) & (batch_pseudoed[0].gt_sem_seg.data[0] != 255)
+					# to_logs["conf_var_iou"] = (conf_mask & right_mask).sum() / (conf_mask | right_mask).sum()
+					# to_logs["conf_var_TP"] = (conf_mask & right_mask).sum() / conf_mask.sum()
+				else:
+					raise ValueError(f"unknown high_conf_mask type {self.kwargs.high_conf_mask.type}")
+				conf_mask = hign_conf_mask & (batch_pseudoed[0].gt_sem_seg.data[0] != 255)
+				right_mask = (batch_pseudoed[0].gt_sem_seg.data[0] == batch_pseudoed[0].pred_sem_seg.data[0]) & (batch_pseudoed[0].gt_sem_seg.data[0] != 255)
+				to_logs["conf_iou"] = (conf_mask & right_mask).sum() / (conf_mask | right_mask).sum()
+				to_logs["conf_TP"] = (conf_mask & right_mask).sum() / conf_mask.sum()
+				### DAT variance
 				# apply mask
 				sem_seg_ = batch_pseudoed[0].pred_sem_seg.data[0]
 				sem_seg_[~hign_conf_mask] = 255
