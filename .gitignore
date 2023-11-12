@@ -121,3 +121,4 @@ mmseg/.mim
 /debug/
 configs/amlt/latest.yaml
 /outputs
+/sam
