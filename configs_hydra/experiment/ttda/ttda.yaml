@@ -4,8 +4,11 @@ ttda_hook:
   type: TTDAHook
   turn_on_adapt: true # for test source-only
   adapt_img_vis_freq: ??? # for adapt, can see the proto for learning
-  use_pseudo_label: ???
-  pseudo_use_ori: true # use freezed source label for pseudo label
+  # use_pseudo_label: ???
+  # pseudo_use_ori: true # use freezed source label for pseudo label
+  pseudo_label:
+    turn_on: true
+    type: ori # ori, cur, ema # remember to turn on ema
   slide_adapt: ???
   high_conf_mask:
     turn_on: ???

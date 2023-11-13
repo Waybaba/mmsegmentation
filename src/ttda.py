@@ -1675,7 +1675,6 @@ class TTDAHook(Hook):
 		### init
 		to_logs = {}
 		if not self.kwargs.turn_on_adapt: return
-		use_pseudo_label = self.kwargs.use_pseudo_label
 		# inputs, data_samples = batch["inputs"], batch["data_samples"]
 		if not hasattr(self, "model_ori"): # source model for pseudo
 			assert batch_idx == 0, "model_ori should be init only once"
@@ -1698,7 +1697,11 @@ class TTDAHook(Hook):
 		# -> batch_pseudoed
 		# -> hign_conf_mask (then mask to batch_pseudoed)
 		if True:
-			batch_pseudoed_model = self.model_ori if self.kwargs.pseudo_use_ori else runner.model
+			batch_pseudoed_model = {
+				"ori": self.model_ori,
+				"cur": runner.model,
+				"ema": self.model_ema,
+			}[self.kwargs.pseudo_label.type]
 			with torch.no_grad():
 				batch_pseudoed = batch_pseudoed_model.test_step(batch_noaug) if IS_DEEPLAB else batch_pseudoed_model.test_step_plus(batch_noaug)
 			if self.kwargs.high_conf_mask.turn_on:
@@ -1824,10 +1827,10 @@ class TTDAHook(Hook):
 					batch_pseudoed_slided['data_samples'].append(meta_pseudoed_this)
 		if self.kwargs.slide_adapt:
 			data_batch_for_adapt = deepcopy(batch_pseudoed_slided) \
-				if use_pseudo_label else deepcopy(batch_slided)
+				if self.kwargs.pseudo_label.turn_on else deepcopy(batch_slided)
 		else:
 			data_batch_for_adapt = batch_noaug
-			if use_pseudo_label:
+			if self.kwargs.pseudo_label.turn_on:
 				for i in range(len(data_batch_for_adapt["data_samples"])):
 					data_batch_for_adapt["data_samples"][i].gt_sem_seg = batch_pseudoed[i].pred_sem_seg
 		data_batch_for_adapt_bak = deepcopy(data_batch_for_adapt)
