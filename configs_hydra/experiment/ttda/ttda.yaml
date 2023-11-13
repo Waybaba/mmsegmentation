@@ -3,11 +3,9 @@
 ttda_hook: 
   type: TTDAHook
   turn_on_adapt: true # for test source-only
-  adapt_img_vis_freq: ??? # for adapt, can see the proto for learning
   pseudo_label:
     turn_on: true
-    type: ori # ori, cur, ema # remember to turn on ema
-  slide_adapt: ???
+    type: ema # ori, cur, ema # remember to turn on ema
   high_conf_mask:
     turn_on: ???
     metric: uncertainty # confidence, uncertainty
@@ -25,7 +23,7 @@ ttda_hook:
     proto_mask_top_p: 0.9 # 
     proto_mask_metric: "entropy" # confidence, entropy, ground_truth, none
     proto_mask_use_history: false # whether top_p threshold is based on all history metric or only this img 
-  sam_predict:
+  sam_predict: # predict with sam
     turn_on: ???
     tau: 1.0 # temperature for sam feats pseudo weights
     type: logits_mask_adjust # logits_mask_adjust, sam_feats_proto
@@ -33,6 +31,22 @@ ttda_hook:
     sam_ratio: 1.0 # 0.0 means no sam
     sam_ratio_mul_conf: true # whether add confidence to sam feats
     sam_ratio_conf_adjust: 1.0 # 0.0 all one, 1.0 linear, 100.0 all zero
+  sam_model: # use sam online predict mask
+    turn_on: true
+    model: 
+      # _target_: sam.scripts.pure_model.SegmentAnythingModelWrapper
+      # _partial_: true
+      # model_type: vit_b
+      # checkpoint: ${oc.env:UDATADIR}/models/seg_models/segment_anything/sam_vit_b_01ec64.pth
+      model_type: vit_h
+      checkpoint: ${oc.env:UDATADIR}/models/seg_models/segment_anything/sam_vit_h_4b8939.pth
+      device: ${device}
+    sam:
+      checkpoint: ${ttda_hook.sam_model.model.checkpoint}
+      model_type: ${ttda_hook.sam_model.model.model_type}
+    # mask_generator:
+    #   _target_: sam.segment_anything.SamAutomaticMaskGenerator
+    #   _partial_: true
   pseudo_label_loss:
     ratio: 0.0 # 0. or 1. to only adjust entropy loss
     conf_weight_tau: 1.0 # 0.0 all one, 1.0 linear, 100.0 all zero
@@ -58,23 +72,9 @@ ttda_hook:
   ema:
     turn_on: false
     rho: 0.01 # how much would ema be updated each step
-    cur_recover: true
-  sam_model:
-    turn_on: true
-    model: 
-      # _target_: sam.scripts.pure_model.SegmentAnythingModelWrapper
-      # _partial_: true
-      # model_type: vit_b
-      # checkpoint: ${oc.env:UDATADIR}/models/seg_models/segment_anything/sam_vit_b_01ec64.pth
-      model_type: vit_h
-      checkpoint: ${oc.env:UDATADIR}/models/seg_models/segment_anything/sam_vit_h_4b8939.pth
-      device: ${device}
-    sam:
-      checkpoint: ${ttda_hook.sam_model.model.checkpoint}
-      model_type: ${ttda_hook.sam_model.model.model_type}
-    # mask_generator:
-    #   _target_: sam.segment_anything.SamAutomaticMaskGenerator
-    #   _partial_: true
+    cur_recover: false
+  slide_adapt: ???
+  adapt_img_vis_freq: ??? # for adapt, can see the proto for learning
 
   debug:
     use_mmseg_pseudo_loss: ???
@@ -133,9 +133,8 @@ model:
       prompt_size: 3
       res_add: 1
       weight_init_type: normal # "normal" 
-# model:
-#   test_cfg:
-#     mode: slide
+  test_cfg:
+    type: TestLoopWrapper
 
 train: false
 test: true

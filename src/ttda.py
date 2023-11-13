@@ -44,8 +44,12 @@ from mmseg.evaluation.metrics import IoUMetric
 from mmseg.models import EncoderDecoder
 import torch.utils.checkpoint as cp
 import math
+from mmengine.registry import LOOPS
 from scipy.ndimage import label, find_objects
+from mmengine.runner.loops import TestLoop
+from mmengine.runner.amp import autocast
 EPS = 1e-10
+
 def quadratic_function(x, alpha):
 	"""
 	Computes the value of a quadratic function that passes through points (0,0) and (1,1).
@@ -1439,6 +1443,44 @@ class MixVisionTransformerTPT(MixVisionTransformer):
 			identity = x
 		return identity + model.dropout_layer(out)
 
+
+@LOOPS.register_module()
+class TestLoopWrapper(TestLoop):
+
+    def run(self) -> dict:
+        """Launch test."""
+        self.runner.call_hook('before_test')
+        self.runner.call_hook('before_test_epoch')
+        self.runner.model.eval()
+        for idx, data_batch in enumerate(self.dataloader):
+            self.run_iter(idx, data_batch)
+
+        # compute metrics
+        metrics = self.evaluator.evaluate(len(self.dataloader.dataset))
+        self.runner.call_hook('after_test_epoch', metrics=metrics)
+        self.runner.call_hook('after_test')
+        return metrics
+
+    @torch.no_grad()
+    def run_iter(self, idx, data_batch: Sequence[dict]) -> None:
+        """Iterate one mini-batch.
+
+        Args:
+            data_batch (Sequence[dict]): Batch of data from dataloader.
+        """
+        self.runner.call_hook(
+            'before_test_iter', batch_idx=idx, data_batch=data_batch)
+        # predictions should be sequence of BaseDataElement
+        with autocast(enabled=self.fp16):
+            outputs = self.runner.model.test_step(data_batch)
+        self.evaluator.process(data_samples=outputs, data_batch=data_batch)
+        self.runner.call_hook(
+            'after_test_iter',
+            batch_idx=idx,
+            data_batch=data_batch,
+            outputs=outputs)
+
+
 class SegValueTrans:
 	"""
 	turn img size value to seg for crop
@@ -1704,11 +1746,14 @@ class TTDAHook(Hook):
 		# -> batch_pseudoed
 		# -> hign_conf_mask (then mask to batch_pseudoed)
 		if True:
-			batch_pseudoed_model = {
-				"ori": self.model_ori,
-				"cur": runner.model,
-				"ema": self.model_ema,
-			}[self.kwargs.pseudo_label.type]
+			if self.kwargs.pseudo_label.type == "ori":
+				batch_pseudoed_model = self.model_ori
+			elif self.kwargs.pseudo_label.type == "cur":
+				batch_pseudoed_model = runner.model
+			elif self.kwargs.pseudo_label.type == "ema":
+				batch_pseudoed_model = self.model_ema
+			else:
+				raise ValueError(f"unknown pseudo_label type {self.kwargs.pseudo_label.type}")
 			with torch.no_grad():
 				batch_pseudoed = batch_pseudoed_model.test_step(batch_noaug) if IS_DEEPLAB else batch_pseudoed_model.test_step_plus(batch_noaug)
 			if self.kwargs.high_conf_mask.turn_on:
@@ -1766,7 +1811,7 @@ class TTDAHook(Hook):
 							# Clean up
 							gc.collect()
 							torch.cuda.empty_cache()
-							
+
 							return var_mask
 					
 					hign_conf_mask = compute_var_mask(batch, batch_pseudoed_model, self.kwargs)
