@@ -96,9 +96,9 @@ tta_pipeline:
       - keep_ratio: true
         scale_factor: 0.75
         type: Resize
-      - keep_ratio: true
-        scale_factor: 0.875
-        type: Resize
+      # - keep_ratio: true
+      #   scale_factor: 0.875
+      #   type: Resize
     # - - keep_ratio: true
     #     scale_factor: 0.5
     #     type: Resize

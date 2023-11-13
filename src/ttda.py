@@ -212,20 +212,26 @@ def adjust_with_sam(logits, automask, cfg):
 	return adjusted_logits
 
 def param_migrate(base, tgt, rho):
-	"""
-	rho = 1 means copy all params from src to tgt
-	rho = 0 means copy nothing
-	others, final = (1-rho) * base + rho * tgt
-	"""
-	# check all keys the same
-	for name, param in base.named_parameters():
-		assert name in tgt.state_dict().keys(), f"{name} not in tgt"
-	for name, param in tgt.named_parameters():
-		base.state_dict()[name].data.copy_(
-			(1-rho) * base.state_dict()[name].data \
-				+ rho * param.data
-			)
-	return base
+    """
+    rho = 1 means copy all params from src to tgt
+    rho = 0 means copy nothing
+    others, final = (1-rho) * base + rho * tgt
+    """
+    # Store base and target state_dict for efficiency
+    base_state_dict = base.state_dict()
+    tgt_state_dict = tgt.state_dict()
+
+    # Ensure all keys are present in both models
+    assert base_state_dict.keys() == tgt_state_dict.keys(), "Models have different parameters"
+
+    # Loop through the parameters
+    for name in base_state_dict:
+        base_param = base_state_dict[name]
+        tgt_param = tgt_state_dict[name]
+        # Update the parameter based on rho
+        base_param.data.copy_((1 - rho) * base_param.data + rho * tgt_param.data)
+
+    return base
 
 def aug_to_first(data):
 	""" get one from augs
@@ -1758,10 +1764,9 @@ class TTDAHook(Hook):
 								var_mask = variance < variance.quantile(self_kwargs.high_conf_mask.top_p)
 
 							# Clean up
-							del aug_data_list, predictions, softmax_probs, variance
 							gc.collect()
 							torch.cuda.empty_cache()
-
+							
 							return var_mask
 					
 					hign_conf_mask = compute_var_mask(batch, batch_pseudoed_model, self.kwargs)

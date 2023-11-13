@@ -4,8 +4,6 @@ ttda_hook:
   type: TTDAHook
   turn_on_adapt: true # for test source-only
   adapt_img_vis_freq: ??? # for adapt, can see the proto for learning
-  # use_pseudo_label: ???
-  # pseudo_use_ori: true # use freezed source label for pseudo label
   pseudo_label:
     turn_on: true
     type: ori # ori, cur, ema # remember to turn on ema
@@ -60,7 +58,7 @@ ttda_hook:
   ema:
     turn_on: false
     rho: 0.01 # how much would ema be updated each step
-    cur_recover: false
+    cur_recover: true
   sam_model:
     turn_on: true
     model: 
