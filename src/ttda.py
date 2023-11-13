@@ -50,6 +50,62 @@ from mmengine.runner.loops import TestLoop
 from mmengine.runner.amp import autocast
 EPS = 1e-10
 
+
+### utils ###
+
+def is_deeplab(model):
+	""" TODO not sure if this is the best way to check
+	"""
+	m = model.module if hasattr(model, "module") else model
+	if m.backbone.__class__.__name__ == "MixVisionTransformerTPT":
+		return False
+	elif m.backbone.__class__.__name__ == "MixVisionTransformerTPT":
+		raise NotImplementedError(f"unknown backbone {m.backbone.__class__.__name__}")
+	else:
+		raise NotImplementedError(f"unknown backbone {m.backbone.__class__.__name__}")
+
+def is_tta(data):
+	""" check if the data is tta format
+	"""
+	if isinstance(data['inputs'][0], tuple):
+		return True
+	else:
+		return False
+
+def _scaled_dot_product_attention_llama_adapter(
+	q,
+	k,
+	v,
+	attn_mask = None,
+	dropout_p = 0.0,
+	tpt_num = None,
+	gate = None,
+):
+	B, Nt, E = q.shape
+	q = q / math.sqrt(E)
+	# (B, Nt, E) x (B, E, Ns) -> (B, Nt, Ns)
+	if attn_mask is not None:
+		attn = torch.baddbmm(attn_mask, q, k.transpose(-2, -1))
+	else:
+		attn = torch.bmm(q, k.transpose(-2, -1))
+
+	### @waybaba
+	if tpt_num is not None:
+		# attn = F.softmax(attn, dim=-1)
+		attn_ori = attn[:, :, :-tpt_num] # [B, num_tokens_out, num_tokens_in]
+		attn_extra = attn[:, :, -tpt_num:]
+		attn_ori = torch.softmax(attn_ori, dim=-1)
+		attn_extra = torch.softmax(attn_extra, dim=-1) * torch.tanh(gate)
+		attn = torch.cat([attn_ori, attn_extra], dim=-1)
+	else:
+		attn = F.softmax(attn, dim=-1)
+	### @waybaba
+	if dropout_p > 0.0:
+		attn = F.dropout(attn, p=dropout_p)
+	# (B, Nt, Ns) x (B, Ns, E) -> (B, Nt, E)
+	output = torch.bmm(attn, v)
+	return output, attn
+
 def quadratic_function(x, alpha):
 	"""
 	Computes the value of a quadratic function that passes through points (0,0) and (1,1).
@@ -70,7 +126,6 @@ def quadratic_function(x, alpha):
 	"""
 	return x ** alpha
 
-@torch.no_grad()
 def sam_feats_proto_predict(sam_feats, logits, cfg):
 	""" 
 	use logits to calculate the confidence of each pixel for each class
@@ -216,26 +271,26 @@ def adjust_with_sam(logits, automask, cfg):
 	return adjusted_logits
 
 def param_migrate(base, tgt, rho):
-    """
-    rho = 1 means copy all params from src to tgt
-    rho = 0 means copy nothing
-    others, final = (1-rho) * base + rho * tgt
-    """
-    # Store base and target state_dict for efficiency
-    base_state_dict = base.state_dict()
-    tgt_state_dict = tgt.state_dict()
+	"""
+	rho = 1 means copy all params from src to tgt
+	rho = 0 means copy nothing
+	others, final = (1-rho) * base + rho * tgt
+	"""
+	# Store base and target state_dict for efficiency
+	base_state_dict = base.state_dict()
+	tgt_state_dict = tgt.state_dict()
 
-    # Ensure all keys are present in both models
-    assert base_state_dict.keys() == tgt_state_dict.keys(), "Models have different parameters"
+	# Ensure all keys are present in both models
+	assert base_state_dict.keys() == tgt_state_dict.keys(), "Models have different parameters"
 
-    # Loop through the parameters
-    for name in base_state_dict:
-        base_param = base_state_dict[name]
-        tgt_param = tgt_state_dict[name]
-        # Update the parameter based on rho
-        base_param.data.copy_((1 - rho) * base_param.data + rho * tgt_param.data)
+	# Loop through the parameters
+	for name in base_state_dict:
+		base_param = base_state_dict[name]
+		tgt_param = tgt_state_dict[name]
+		# Update the parameter based on rho
+		base_param.data.copy_((1 - rho) * base_param.data + rho * tgt_param.data)
 
-    return base
+	return base
 
 def aug_to_first(data):
 	""" get one from augs
@@ -248,6 +303,19 @@ def aug_to_first(data):
 		data = {k: v[0] for k, v in data.items()}
 	return data
 
+def make_grid(num=32):
+	"""
+	Creates a grid of points in the range (0, 1), not including 0 and 1.
+	The grid is of shape (num*num, 2), where each row represents the (x, y)
+	coordinates of a point.
+	
+	:param num: Number of points in each dimension, excluding the boundaries.
+	:return: A NumPy array of shape (num*num, 2) with the grid points.
+	"""
+	points = np.linspace(0, 1, num + 2, endpoint=False)[1:]
+	x, y = np.meshgrid(points, points)
+	grid = np.stack((x, y), axis=-1).reshape(-1, 2)
+	return grid
 
 class ProtoClassifier:
 	"""
@@ -348,57 +416,201 @@ class ProtoClassifier:
 
 		return refined_prediction
 
-def make_grid(num=32):
+class SegValueTrans:
 	"""
-	Creates a grid of points in the range (0, 1), not including 0 and 1.
-	The grid is of shape (num*num, 2), where each row represents the (x, y)
-	coordinates of a point.
-	
-	:param num: Number of points in each dimension, excluding the boundaries.
-	:return: A NumPy array of shape (num*num, 2) with the grid points.
+	turn img size value to seg for crop
 	"""
-	points = np.linspace(0, 1, num + 2, endpoint=False)[1:]
-	x, y = np.meshgrid(points, points)
-	grid = np.stack((x, y), axis=-1).reshape(-1, 2)
-	return grid
+	def __init__(self, img_size, seg_size):
+		self.img_size = img_size  # (h, w)
+		self.seg_size = seg_size  # (h, w)
 
-# TODO check model.train in ttda mode
-# TODO check multi head ! I only have one head
-def _scaled_dot_product_attention_llama_adapter(
-	q,
-	k,
-	v,
-	attn_mask = None,
-	dropout_p = 0.0,
-	tpt_num = None,
-	gate = None,
-):
-	B, Nt, E = q.shape
-	q = q / math.sqrt(E)
-	# (B, Nt, E) x (B, E, Ns) -> (B, Nt, Ns)
-	if attn_mask is not None:
-		attn = torch.baddbmm(attn_mask, q, k.transpose(-2, -1))
-	else:
-		attn = torch.bmm(q, k.transpose(-2, -1))
+	def trans(self, v, type='w'):
+		"""
+		type:
+			w: width
+			h: height
+			x: x pos
+			y: y pos
+		"""
+		if type == 'h':
+			return int(v * (self.seg_size[0] / self.img_size[0]))
+		elif type == 'w':
+			return int(v * (self.seg_size[1] / self.img_size[1]))
+		elif type == 'y':
+			# Assuming y pos translation maintains the same ratio
+			return int(v * (self.seg_size[0] / self.img_size[0]))
+		elif type == 'x':
+			# Assuming x pos translation maintains the same ratio
+			return int(v * (self.seg_size[1] / self.img_size[1]))
+		else:
+			raise ValueError("Invalid type provided.")
 
-	### @waybaba
-	if tpt_num is not None:
-		# attn = F.softmax(attn, dim=-1)
-		attn_ori = attn[:, :, :-tpt_num] # [B, num_tokens_out, num_tokens_in]
-		attn_extra = attn[:, :, -tpt_num:]
-		attn_ori = torch.softmax(attn_ori, dim=-1)
-		attn_extra = torch.softmax(attn_extra, dim=-1) * torch.tanh(gate)
-		attn = torch.cat([attn_ori, attn_extra], dim=-1)
-	else:
-		attn = F.softmax(attn, dim=-1)
-	### @waybaba
-	if dropout_p > 0.0:
-		attn = F.dropout(attn, p=dropout_p)
-	# (B, Nt, Ns) x (B, Ns, E) -> (B, Nt, E)
-	output = torch.bmm(attn, v)
-	return output, attn
+class SegMasker:
+	"""
+	TODO improve buffer size
+	Mask out low pseudo-labels in seg
+	Detail: 
+		maintain a buffer of confidence of pixels for each class,
+		for each seg, set pixels to 255 if its confidence is not 
+		in top-p percent.
+		# TODO each img should have some weight
+		# TODO if buffer is to long, half it by only keep the even index'
+		# TODO for cases where no class in buffer
+	"""
+	def __init__(self, use_history, class_specific):
+		self.buffer = {}
+		self.use_history = use_history
+		self.class_specific = class_specific
 
-@METRICS.register_module() # TODO import
+	def add_to_buffer(self, seg_metric, seg_pred):
+		""" 
+		seg_conf: (H, W) with each pixel value as confidence (0-1)
+		seg_pred: (H, W) with each pixel value as predicted class
+		save confidence of each pixel for each class
+		TODO here, we hope the buffer can be running, so that the new conf would be used
+			but if we use fixed size for each class, then the buffer would never be updated for rare class
+			if use time as indication, the rare class would be updated too frequently
+		"""
+		SIZE_RATIO = 500
+		if self.class_specific:
+			for cls in seg_pred.unique():
+				if cls.item() == 255:  # Skip the reserved value
+					continue
+				if cls.item() not in self.buffer:
+					self.buffer[cls.item()] = []
+				# Get confidences for pixels where the prediction matches the current class
+				cls_confs = seg_metric[seg_pred == cls].flatten().tolist()
+				### TODO partial
+				while len(cls_confs) > 1000: cls_confs = cls_confs[::2]
+				self.buffer[cls.item()].extend(cls_confs)
+				while len(self.buffer[cls.item()]) > 1000*SIZE_RATIO: 
+					self.buffer[cls.item()] = self.buffer[cls.item()][::2]
+		else:
+			# Global buffer handling
+			confs = seg_metric.flatten().tolist()
+			while len(confs) > 1000: confs = confs[::2]
+			self.buffer.setdefault("global", []).extend(confs)
+			while len(self.buffer["global"]) > 1000 * SIZE_RATIO: 
+				self.buffer["global"] = self.buffer["global"][::2]
+		
+	def cal_mask(self, seg_metric, seg_pred, top_p):
+		"""
+		return a mask shape as seg with True for high confidence,
+		cal top_p percent
+		"""
+		mask = torch.zeros_like(seg_metric, dtype=torch.bool)
+		if self.class_specific:
+			mask = torch.zeros_like(seg_metric, dtype=torch.bool)
+			for cls, confs in self.buffer.items():
+				if not confs:  # if no confidences stored for this class, skip
+					continue
+				if self.use_history:
+					all_confs = torch.tensor(confs).flatten()
+				else:
+					all_confs = seg_metric[seg_pred == cls].flatten()
+				if all_confs.numel() == 0: continue
+				threshold = all_confs.quantile(1-top_p)  # Notice that it's now `top_p` directly as we're marking high confidences
+				mask[(seg_pred == cls) & (seg_metric >= threshold)] = True  # Only change the mask where condition is met
+		else:
+			# Global mask computation
+			if self.use_history:
+				all_confs = torch.tensor(self.buffer.get("global", [])).flatten()
+			else:
+				all_confs = seg_metric.flatten()
+			if all_confs.numel() > 0:
+				threshold = all_confs.quantile(1 - top_p)
+				mask[seg_metric >= threshold] = True
+
+		return mask
+
+
+### wrappers ###
+@HOOKS.register_module()
+class TTDABeforeRunInitHook(Hook):
+	""" Why this? -> init train stuff
+	The only reason for this function is doing some train_init stuff
+	since when only "test=true", mmengine won't init optimizer
+	and, to init it, we need to do it "before_run"
+	"""
+	def before_run(self, runner) -> None:
+		# adapt init (e.g. optimizer)
+		runner.logger.info('fake train init')
+		self.fake_train_init(runner)
+		runner.logger.info('fake train init done')
+
+	def fake_train_init(self, runner):
+		""" Since we need to init something before test
+		the original mmseg does not do this since test does not optimizer ...
+		we here fetch some train code to init
+		mmengine/runner/runner.py -> Runner.train()
+		"""
+		if is_model_wrapper(runner.model):
+			ori_model = runner.model.module
+		else:
+			ori_model = runner.model
+		assert hasattr(ori_model, 'train_step'), (
+			'If you want to train your model, please make sure your model '
+			'has implemented `train_step`.')
+
+		if runner._val_loop is not None:
+			assert hasattr(ori_model, 'val_step'), (
+				'If you want to validate your model, please make sure your '
+				'model has implemented `val_step`.')
+
+		if runner._train_loop is None:
+			raise RuntimeError(
+				'`self._train_loop` should not be None when calling train '
+				'method. Please provide `train_dataloader`, `train_cfg`, '
+				'`optimizer` and `param_scheduler` arguments when '
+				'initializing runner.')
+
+		# runner._train_loop = runner.build_train_loop(
+		#     runner._train_loop)  # type: ignore
+
+		# `build_optimizer` should be called before `build_param_scheduler`
+		#  because the latter depends on the former
+		runner.optim_wrapper = runner.build_optim_wrapper(runner.optim_wrapper)
+		# Automatically scaling lr by linear scaling rule
+		runner.scale_lr(runner.optim_wrapper, runner.auto_scale_lr)
+
+		if runner.param_schedulers is not None:
+			runner.param_schedulers = runner.build_param_scheduler(  # type: ignore
+				runner.param_schedulers)  # type: ignore
+
+		if runner._val_loop is not None:
+			runner._val_loop = runner.build_val_loop(
+				runner._val_loop)  # type: ignore
+		# TODO: add a contextmanager to avoid calling `before_run` many times
+		# runner.call_hook('before_run')
+
+		# initialize the model weights
+		runner._init_model_weights() # ! note the process when train multiple times
+
+		# try to enable efficient_conv_bn_eval feature
+		modules = runner.cfg.get('efficient_conv_bn_eval', None)
+		if modules is not None:
+			runner.logger.info(f'Enabling the "efficient_conv_bn_eval" feature'
+							 f' for sub-modules: {modules}')
+			turn_on_efficient_conv_bn_eval(ori_model, modules)
+
+		# make sure checkpoint-related hooks are triggered after `before_run`
+		runner.load_or_resume()
+
+		# Initiate inner count of `optim_wrapper`.
+		# runner.optim_wrapper.initialize_count_status( # ! TODO how to handle this?
+		#     runner.model,
+		#     runner._train_loop.iter,  # type: ignore
+		#     runner._train_loop.max_iters)  # type: ignore
+
+		# Maybe compile the model according to options in self.cfg.compile
+		# This must be called **AFTER** model has been wrapped.
+		# runner._maybe_compile('train_step')
+
+		# model = runner.train_loop.run()  # type: ignore
+		# runner.call_hook('after_run')
+		return None
+
+@METRICS.register_module()
 class IoUMetricWrapper(IoUMetric):
 	def compute_metrics(self, results: list):
 		if self.format_only:
@@ -1444,285 +1656,93 @@ class MixVisionTransformerTPT(MixVisionTransformer):
 		return identity + model.dropout_layer(out)
 
 
+### MAIN ###
 @LOOPS.register_module()
 class TestLoopWrapper(TestLoop):
-
-    def run(self) -> dict:
-        """Launch test."""
-        self.runner.call_hook('before_test')
-        self.runner.call_hook('before_test_epoch')
-        self.runner.model.eval()
-        for idx, data_batch in enumerate(self.dataloader):
-            self.run_iter(idx, data_batch)
-
-        # compute metrics
-        metrics = self.evaluator.evaluate(len(self.dataloader.dataset))
-        self.runner.call_hook('after_test_epoch', metrics=metrics)
-        self.runner.call_hook('after_test')
-        return metrics
-
-    @torch.no_grad()
-    def run_iter(self, idx, data_batch: Sequence[dict]) -> None:
-        """Iterate one mini-batch.
-
-        Args:
-            data_batch (Sequence[dict]): Batch of data from dataloader.
-        """
-        self.runner.call_hook(
-            'before_test_iter', batch_idx=idx, data_batch=data_batch)
-        # predictions should be sequence of BaseDataElement
-        with autocast(enabled=self.fp16):
-            outputs = self.runner.model.test_step(data_batch)
-        self.evaluator.process(data_samples=outputs, data_batch=data_batch)
-        self.runner.call_hook(
-            'after_test_iter',
-            batch_idx=idx,
-            data_batch=data_batch,
-            outputs=outputs)
-
-
-class SegValueTrans:
-	"""
-	turn img size value to seg for crop
-	"""
-	def __init__(self, img_size, seg_size):
-		self.img_size = img_size  # (h, w)
-		self.seg_size = seg_size  # (h, w)
-
-	def trans(self, v, type='w'):
-		"""
-		type:
-			w: width
-			h: height
-			x: x pos
-			y: y pos
-		"""
-		if type == 'h':
-			return int(v * (self.seg_size[0] / self.img_size[0]))
-		elif type == 'w':
-			return int(v * (self.seg_size[1] / self.img_size[1]))
-		elif type == 'y':
-			# Assuming y pos translation maintains the same ratio
-			return int(v * (self.seg_size[0] / self.img_size[0]))
-		elif type == 'x':
-			# Assuming x pos translation maintains the same ratio
-			return int(v * (self.seg_size[1] / self.img_size[1]))
-		else:
-			raise ValueError("Invalid type provided.")
-
-class SegMasker:
-	"""
-	TODO improve buffer size
-	Mask out low pseudo-labels in seg
-	Detail: 
-		maintain a buffer of confidence of pixels for each class,
-		for each seg, set pixels to 255 if its confidence is not 
-		in top-p percent.
-		# TODO each img should have some weight
-		# TODO if buffer is to long, half it by only keep the even index'
-		# TODO for cases where no class in buffer
-	"""
-	def __init__(self, use_history, class_specific):
-		self.buffer = {}
-		self.use_history = use_history
-		self.class_specific = class_specific
-
-	def add_to_buffer(self, seg_metric, seg_pred):
-		""" 
-		seg_conf: (H, W) with each pixel value as confidence (0-1)
-		seg_pred: (H, W) with each pixel value as predicted class
-		save confidence of each pixel for each class
-		TODO here, we hope the buffer can be running, so that the new conf would be used
-			but if we use fixed size for each class, then the buffer would never be updated for rare class
-			if use time as indication, the rare class would be updated too frequently
-		"""
-		SIZE_RATIO = 500
-		if self.class_specific:
-			for cls in seg_pred.unique():
-				if cls.item() == 255:  # Skip the reserved value
-					continue
-				if cls.item() not in self.buffer:
-					self.buffer[cls.item()] = []
-				# Get confidences for pixels where the prediction matches the current class
-				cls_confs = seg_metric[seg_pred == cls].flatten().tolist()
-				### TODO partial
-				while len(cls_confs) > 1000: cls_confs = cls_confs[::2]
-				self.buffer[cls.item()].extend(cls_confs)
-				while len(self.buffer[cls.item()]) > 1000*SIZE_RATIO: 
-					self.buffer[cls.item()] = self.buffer[cls.item()][::2]
-		else:
-			# Global buffer handling
-			confs = seg_metric.flatten().tolist()
-			while len(confs) > 1000: confs = confs[::2]
-			self.buffer.setdefault("global", []).extend(confs)
-			while len(self.buffer["global"]) > 1000 * SIZE_RATIO: 
-				self.buffer["global"] = self.buffer["global"][::2]
-		
-	def cal_mask(self, seg_metric, seg_pred, top_p):
-		"""
-		return a mask shape as seg with True for high confidence,
-		cal top_p percent
-		"""
-		mask = torch.zeros_like(seg_metric, dtype=torch.bool)
-		if self.class_specific:
-			mask = torch.zeros_like(seg_metric, dtype=torch.bool)
-			for cls, confs in self.buffer.items():
-				if not confs:  # if no confidences stored for this class, skip
-					continue
-				if self.use_history:
-					all_confs = torch.tensor(confs).flatten()
-				else:
-					all_confs = seg_metric[seg_pred == cls].flatten()
-				if all_confs.numel() == 0: continue
-				threshold = all_confs.quantile(1-top_p)  # Notice that it's now `top_p` directly as we're marking high confidences
-				mask[(seg_pred == cls) & (seg_metric >= threshold)] = True  # Only change the mask where condition is met
-		else:
-			# Global mask computation
-			if self.use_history:
-				all_confs = torch.tensor(self.buffer.get("global", [])).flatten()
-			else:
-				all_confs = seg_metric.flatten()
-			if all_confs.numel() > 0:
-				threshold = all_confs.quantile(1 - top_p)
-				mask[seg_metric >= threshold] = True
-
-		return mask
-
-
-def is_deeplab(model):
-	""" TODO not sure if this is the best way to check
-	"""
-	m = model.module if hasattr(model, "module") else model
-	if m.backbone.__class__.__name__ == "MixVisionTransformerTPT":
-		return False
-	elif m.backbone.__class__.__name__ == "MixVisionTransformerTPT":
-		raise NotImplementedError(f"unknown backbone {m.backbone.__class__.__name__}")
-	else:
-		raise NotImplementedError(f"unknown backbone {m.backbone.__class__.__name__}")
-
-def is_tta(data):
-	""" check if the data is tta format
-	"""
-	if isinstance(data['inputs'][0], tuple):
-		return True
-	else:
-		return False
-
-# main
-
-@HOOKS.register_module()
-class TTDAHook(Hook):
-	"""Check invalid loss hook.
-
-	This hook will regularly check whether the loss is valid
-	during training.
-
-	Args:
-		interval (int): Checking interval (every k iterations).
-			Default: 50.
-	"""
-
 	def __init__(self, **kwargs) -> None:
+		super().__init__(
+			kwargs["runner"],
+			kwargs["dataloader"],
+			kwargs["evaluator"],
+			kwargs["fp16"] if "fp16" in kwargs else False,
+		)
+		# remove some args
+		for _ in ["runner", "dataloader", "evaluator", "fp16"]:
+			if _ in kwargs:
+				del kwargs[_]
 		self.kwargs = Config(kwargs)
 
-	def fake_train_init(self, runner):
-		""" Since we need to init something before test
-		the original mmseg does not do this since test does not optimizer ...
-		we here fetch some train code to init
-		mmengine/runner/runner.py -> Runner.train()
+	### hooks
+	def after_test_epoch(self, runner, metrics):
+		# runner.logger.info('after test epoch')
+		# revert_sync_batchnorm(runner.model) # ! ??? shoud we handle?
+		# runner.logger.info('after test epoch done')
+		runner.visualizer.add_scalars({
+			"test/"+k: v for k, v in metrics.items()
+		})
+		import wandb
+		# columns=[c[4:] for c in metrics.keys() if "IoU_" in c]
+		# wandb_table = wandb.Table(data={c[4:]: v for c, v in metrics.items() if "IoU_" in c})
+		wandb_table = wandb.Table(columns=[c[4:] for c in metrics.keys() if "IoU_" in c], data=[[v for c, v in metrics.items() if "IoU_" in c]])
+		runner.visualizer.get_backend("WandbVisBackend").experiment.log({
+			"IoU_Table": wandb_table
+		})
+
+	def before_test(self, runner):
+		# predict mode switch
+		assert sum([self.kwargs.proto_predict.turn_on, self.kwargs.sam_predict.turn_on, self.kwargs.sam_model.turn_on]) <= 1, \
+			"only one of proto_predict, sam_predict, sam_model should be on"
+		if self.kwargs.proto_predict.turn_on:
+			runner.model.test_step = partial(runner.model.test_step_proto_predict, cfg=self.kwargs.proto_predict)
+		elif self.kwargs.sam_predict.turn_on:
+			runner.model.test_step = partial(runner.model.test_step_sam_predict, cfg=self.kwargs.sam_predict)
+		elif self.kwargs.sam_model.turn_on:
+			from sam.scripts.pure_model import SegmentAnythingModelWrapper
+			from sam.segment_anything import SamAutomaticMaskGenerator, sam_model_registry
+			args = self.kwargs.sam_model
+			sam_model = sam_model_registry[args.sam.model_type](checkpoint=args.sam.checkpoint)
+			self.mask_generator = SamAutomaticMaskGenerator(sam_model)
+			if isinstance(runner.model, SegTTAModelWrapper):
+				runner.model.module.test_step = partial(runner.model.module.test_step_sam_model_predict, mask_generator=self.mask_generator, cfg=self.kwargs.sam_model)
+			elif isinstance(runner.model, EncoderDecoderWrapper):
+				runner.model.test_step = partial(runner.model.test_step_sam_model_predict, mask_generator=self.mask_generator, cfg=self.kwargs.sam_model)
+			else: raise NotImplementedError("only support SegTTAModelWrapper and EncoderDecoderWrapper")
+
+	### utils 
+
+	### main
+	def run(self) -> dict:
+		"""Launch test."""
+		self.before_test(self.runner) # @waybaba
+		self.runner.call_hook('before_test')
+		self.runner.call_hook('before_test_epoch')
+		self.runner.model.eval()
+		for idx, data_batch in enumerate(self.dataloader):
+			self.run_iter(idx, data_batch)
+
+		# compute metrics
+		metrics = self.evaluator.evaluate(len(self.dataloader.dataset))
+		self.runner.call_hook('after_test_epoch', metrics=metrics)
+		self.after_test_epoch(self.runner, metrics) # @waybaba
+		self.runner.call_hook('after_test')
+		return metrics
+
+	@torch.no_grad()
+	def run_iter(self, idx, data_batch: Sequence[dict]) -> None:
+		"""Iterate one mini-batch.
+
+		Args:
+			data_batch (Sequence[dict]): Batch of data from dataloader.
 		"""
-		if is_model_wrapper(runner.model):
-			ori_model = runner.model.module
-		else:
-			ori_model = runner.model
-		assert hasattr(ori_model, 'train_step'), (
-			'If you want to train your model, please make sure your model '
-			'has implemented `train_step`.')
+		self.runner.call_hook(
+			'before_test_iter', batch_idx=idx, data_batch=data_batch)
 
-		if runner._val_loop is not None:
-			assert hasattr(ori_model, 'val_step'), (
-				'If you want to validate your model, please make sure your '
-				'model has implemented `val_step`.')
-
-		if runner._train_loop is None:
-			raise RuntimeError(
-				'`self._train_loop` should not be None when calling train '
-				'method. Please provide `train_dataloader`, `train_cfg`, '
-				'`optimizer` and `param_scheduler` arguments when '
-				'initializing runner.')
-
-		# runner._train_loop = runner.build_train_loop(
-		#     runner._train_loop)  # type: ignore
-
-		# `build_optimizer` should be called before `build_param_scheduler`
-		#  because the latter depends on the former
-		runner.optim_wrapper = runner.build_optim_wrapper(runner.optim_wrapper)
-		# Automatically scaling lr by linear scaling rule
-		runner.scale_lr(runner.optim_wrapper, runner.auto_scale_lr)
-
-		if runner.param_schedulers is not None:
-			runner.param_schedulers = runner.build_param_scheduler(  # type: ignore
-				runner.param_schedulers)  # type: ignore
-
-		if runner._val_loop is not None:
-			runner._val_loop = runner.build_val_loop(
-				runner._val_loop)  # type: ignore
-		# TODO: add a contextmanager to avoid calling `before_run` many times
-		# runner.call_hook('before_run')
-
-		# initialize the model weights
-		runner._init_model_weights() # ! note the process when train multiple times
-
-		# try to enable efficient_conv_bn_eval feature
-		modules = runner.cfg.get('efficient_conv_bn_eval', None)
-		if modules is not None:
-			runner.logger.info(f'Enabling the "efficient_conv_bn_eval" feature'
-							 f' for sub-modules: {modules}')
-			turn_on_efficient_conv_bn_eval(ori_model, modules)
-
-		# make sure checkpoint-related hooks are triggered after `before_run`
-		runner.load_or_resume()
-
-		# Initiate inner count of `optim_wrapper`.
-		# runner.optim_wrapper.initialize_count_status( # ! TODO how to handle this?
-		#     runner.model,
-		#     runner._train_loop.iter,  # type: ignore
-		#     runner._train_loop.max_iters)  # type: ignore
-
-		# Maybe compile the model according to options in self.cfg.compile
-		# This must be called **AFTER** model has been wrapped.
-		# runner._maybe_compile('train_step')
-
-		# model = runner.train_loop.run()  # type: ignore
-		# runner.call_hook('after_run')
-		return None
-
-	def ttda_adapt(self, runner, batch_idx, batch):
-		"""
-		input:
-			inputs: 
-				inputs [(CH, 512, 1024)], data_samples [SegDataSample]
-				{
-					gt_sem_seg: (512, 1024)
-					img_path: 
-					metainfo:
-						scale_factor:
-						ori_shape:
-						img_shape:
-						reduce_zero_label:
-					img_shape:
-					ori_shape:
-					pred_sem_seg: # would have value after model.test_step
-					seg_logits: # would have value after model.test_step
-					scale_factor:
-				}
-		"""
+		runner, batch, batch_idx = self.runner, data_batch, idx
 		IS_DEEPLAB = is_deeplab(runner.model)
 		IS_TTA = is_tta(batch)
 		
 		### init
 		to_logs = {}
-		if not self.kwargs.turn_on_adapt: return
 		# inputs, data_samples = batch["inputs"], batch["data_samples"]
 		if not hasattr(self, "model_ori"): # source model for pseudo
 			assert batch_idx == 0, "model_ori should be init only once"
@@ -1983,7 +2003,8 @@ class TTDAHook(Hook):
 
 
 		### draw
-		if self.every_n_inner_iters(batch_idx, self.kwargs.adapt_img_vis_freq):
+		# if self.every_n_inner_iters(batch_idx, self.kwargs.adapt_img_vis_freq):
+		if batch_idx % self.kwargs.adapt_img_vis_freq == 0:
 			# train sample
 			for i, output in enumerate(data_batch_for_adapt["data_samples"]):
 				# img_path = output.img_path
@@ -2202,95 +2223,16 @@ class TTDAHook(Hook):
 		dict_log = {k: "{:.2f}".format(v.item()) for k, v in to_logs.items()}
 		runner.logger.info(f"log_vars: {dict_log}")
 
-	### hooks
-	
-	def before_run(self, runner) -> None:
-		# adapt init (e.g. optimizer)
-		if self.kwargs.turn_on_adapt:
-			runner.logger.info('fake train init')
-			self.fake_train_init(runner)
-			runner.logger.info('fake train init done')
-		
-		# predict mode switch
-		assert sum([self.kwargs.proto_predict.turn_on, self.kwargs.sam_predict.turn_on, self.kwargs.sam_model.turn_on]) <= 1, \
-			"only one of proto_predict, sam_predict, sam_model should be on"
-		if self.kwargs.proto_predict.turn_on:
-			runner.model.test_step = partial(runner.model.test_step_proto_predict, cfg=self.kwargs.proto_predict)
-		elif self.kwargs.sam_predict.turn_on:
-			runner.model.test_step = partial(runner.model.test_step_sam_predict, cfg=self.kwargs.sam_predict)
-		elif self.kwargs.sam_model.turn_on:
-			from sam.scripts.pure_model import SegmentAnythingModelWrapper
-			from sam.segment_anything import SamAutomaticMaskGenerator, sam_model_registry
-			args = self.kwargs.sam_model
-			sam_model = sam_model_registry[args.sam.model_type](checkpoint=args.sam.checkpoint)
-			self.mask_generator = SamAutomaticMaskGenerator(sam_model)
-			if isinstance(runner.model, SegTTAModelWrapper):
-				runner.model.module.test_step = partial(runner.model.module.test_step_sam_model_predict, mask_generator=self.mask_generator, cfg=self.kwargs.sam_model)
-			elif isinstance(runner.model, EncoderDecoderWrapper):
-				runner.model.test_step = partial(runner.model.test_step_sam_model_predict, mask_generator=self.mask_generator, cfg=self.kwargs.sam_model)
-			else: raise NotImplementedError("only support SegTTAModelWrapper and EncoderDecoderWrapper")
+		# predictions should be sequence of BaseDataElement
+		with autocast(enabled=self.fp16):
+			if self.kwargs.ema.turn_on and self.kwargs.ema.ema_pred:
+				outputs_test = self.model_ema.test_step(data_batch)
+			else:
+				outputs_test = self.runner.model.test_step(data_batch)
+		self.evaluator.process(data_samples=outputs_test, data_batch=data_batch)
+		self.runner.call_hook(
+			'after_test_iter',
+			batch_idx=idx,
+			data_batch=data_batch,
+			outputs=outputs_test)
 
-	def before_test_iter(self,
-						 runner: Runner,
-						 batch_idx: int,
-						 data_batch: Optional[dict] = None) -> None:
-		"""Regularly check whether the loss is valid every n iterations.
-
-		Args:
-			runner (:obj:`Runner`): The runner of the training process.
-			batch_idx (int): The index of the current batch in the train loop.
-			data_batch (dict, Optional): Data from dataloader.
-				Defaults to None.
-			outputs (dict, Optional): Outputs from model. Defaults to None.
-		"""
-		self.ttda_adapt(runner, batch_idx, data_batch)
-
-	def after_test_epoch(self, runner, metrics):
-		# runner.logger.info('after test epoch')
-		# revert_sync_batchnorm(runner.model) # ! ??? shoud we handle?
-		# runner.logger.info('after test epoch done')
-		runner.visualizer.add_scalars({
-			"test/"+k: v for k, v in metrics.items()
-		})
-		import wandb
-		# columns=[c[4:] for c in metrics.keys() if "IoU_" in c]
-		# wandb_table = wandb.Table(data={c[4:]: v for c, v in metrics.items() if "IoU_" in c})
-		wandb_table = wandb.Table(columns=[c[4:] for c in metrics.keys() if "IoU_" in c], data=[[v for c, v in metrics.items() if "IoU_" in c]])
-		runner.visualizer.get_backend("WandbVisBackend").experiment.log({
-			"IoU_Table": wandb_table
-		})
-
-	def after_test_iter(self, runner, batch_idx, data_batch, outputs):
-		# metrics = runner.test_evaluator.evaluate(len(runner.test_dataloader.dataset))
-		# runner.visualizer.add_scalars({
-		#     "test_step/"+k: v for k, v in metrics.items()
-		# })
-		# runner.logger.info(f"test iter {batch_idx} done, metrics: {metrics}")
-		# draw train sample
-		# if self.every_n_inner_iters(batch_idx, self.kwargs.adapt_img_vis_freq_test):
-		# 	for i, output in enumerate(outputs):
-		# 		# img_path = output.img_path
-		# 		# img_bytes = fileio.get(
-		# 		# 	img_path, backend_args=None) # runner.backend_args?
-		# 		# img = mmcv.imfrombytes(img_bytes, channel_order='rgb')
-		# 		size_ = output.gt_sem_seg.shape # (1024, 1024) # ! note w,h order
-		# 		img = data_batch["inputs"][i] # tensor (3, H, W)
-		# 		# interpolate to same size_
-		# 		# TODO
-
-		# 		img = img.float()
-		# 		img = F.interpolate(img.unsqueeze(0), size=(size_[0], size_[1]), mode='bilinear', align_corners=True)
-		# 		img = (img).byte()
-		# 		img = img.squeeze(0).cpu().numpy().transpose(1, 2, 0)
-
-		# 		if img.shape[-1] == 3:
-		# 			img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-		# 		runner.visualizer.add_datasample(
-		# 			f"adapt/test_samples_{i}",
-		# 			img,
-		# 			data_sample=output,
-		# 			show=False,
-		# 			step=runner.iter,
-		# 			draw_pred=True
-		# 			)
-		pass

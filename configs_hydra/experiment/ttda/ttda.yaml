@@ -1,15 +1,14 @@
 # @package _global_
 
-ttda_hook: 
-  type: TTDAHook
-  turn_on_adapt: true # for test source-only
+test_cfg:
+  type: TestLoopWrapper
   pseudo_label:
     turn_on: true
-    type: ema # ori, cur, ema # remember to turn on ema
+    type: ori # ori, cur, ema # remember to turn on ema
   high_conf_mask:
     turn_on: ???
-    metric: uncertainty # confidence, uncertainty
-    class_specific: false # mask globally or class-specific
+    metric: confidence # confidence, uncertainty
+    class_specific: true # mask globally or class-specific
     use_history: false # TODO change to float
     top_p: 0.5 # only keep top_p pixels, others set to 255
   proto_predict:
@@ -42,8 +41,8 @@ ttda_hook:
       checkpoint: ${oc.env:UDATADIR}/models/seg_models/segment_anything/sam_vit_h_4b8939.pth
       device: ${device}
     sam:
-      checkpoint: ${ttda_hook.sam_model.model.checkpoint}
-      model_type: ${ttda_hook.sam_model.model.model_type}
+      checkpoint: ${test_cfg.sam_model.model.checkpoint}
+      model_type: ${test_cfg.sam_model.model.model_type}
     # mask_generator:
     #   _target_: sam.segment_anything.SamAutomaticMaskGenerator
     #   _partial_: true
@@ -73,12 +72,11 @@ ttda_hook:
     turn_on: false
     rho: 0.01 # how much would ema be updated each step
     cur_recover: false
+    ema_pred: true
   slide_adapt: ???
   adapt_img_vis_freq: ??? # for adapt, can see the proto for learning
-
   debug:
     use_mmseg_pseudo_loss: ???
-
 
 
 optim_wrapper:
@@ -98,23 +96,7 @@ optim_wrapper:
         lr_mult: 0.0
       fusion_conv:
         lr_mult: 0.0
-
 norm_lr_mult: 1.0
-
-custom_hooks:
-  - ${ttda_hook} # ! change ttda_hook.xxx so that could be logged in wandb
-
-default_hooks:
-  visualization:
-    draw: ??? # true
-    interval: ??? # draw seg figure
-  logger:
-    interval: 10
-
-train_cfg:
-  val_interval: 100 # not used since this is TTDA
-
-load_from: ??? # ! load from mmseg model
 
 
 ### TPT
@@ -124,7 +106,7 @@ model:
     type: MixVisionTransformerTPT
     tpt_cfg:
       turn_on: false
-      num_tokens: 3
+      num_tokens: 10
       weight_init_type: normal # zero, normal, kv_normal, q_normal
       mode: llama # llama, vpt # TODO
     vpt_cfg:
@@ -133,9 +115,22 @@ model:
       prompt_size: 3
       res_add: 1
       weight_init_type: normal # "normal" 
-  test_cfg:
-    type: TestLoopWrapper
 
+tta: true
+
+
+custom_hooks:
+  # - ${ttda_hook} # ! change ttda_hook.xxx so that could be logged in wandb
+  - type: TTDABeforeRunInitHook
+default_hooks:
+  visualization:
+    draw: ??? # true
+    interval: ??? # draw seg figure
+  logger:
+    interval: 10
+train_cfg:
+  val_interval: 100 # not used since this is TTDA
+load_from: ??? # ! load from mmseg model
 train: false
 test: true
 tags: [ttda_debug]
