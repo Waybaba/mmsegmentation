@@ -60,6 +60,7 @@ ttda_hook:
   ema:
     turn_on: false
     rho: 0.01 # how much would ema be updated each step
+    cur_recover: false
   sam_model:
     turn_on: true
     model: 

@@ -1691,7 +1691,8 @@ class TTDAHook(Hook):
 					param.detach_()
 					param.requires_grad = False
 			self.model_ema = param_migrate(self.model_ema, runner.model, self.kwargs.ema.rho) # update ema
-			runner.model = param_migrate(runner.model, self.model_ema, 1.0) # model to ema
+			if self.kwargs.ema.cur_recover:
+				runner.model = param_migrate(runner.model, self.model_ema, 1.0) # model to ema
 
 		### pseudo label
 		# -> batch_pseudoed
