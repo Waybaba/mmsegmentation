@@ -4,7 +4,7 @@ test_cfg:
   type: TestLoopWrapper
   pseudo_label:
     turn_on: true
-    type: ori # ori, cur, ema # remember to turn on ema
+    type: ema # ori, cur, ema # remember to turn on ema
   high_conf_mask:
     turn_on: ???
     metric: confidence # confidence, uncertainty
@@ -31,7 +31,7 @@ test_cfg:
     sam_ratio_mul_conf: true # whether add confidence to sam feats
     sam_ratio_conf_adjust: 1.0 # 0.0 all one, 1.0 linear, 100.0 all zero
   sam_model: # use sam online predict mask
-    turn_on: true
+    turn_on: false
     model: 
       # _target_: sam.scripts.pure_model.SegmentAnythingModelWrapper
       # _partial_: true
@@ -69,7 +69,7 @@ test_cfg:
   diverse_loss:
     ratio: 0.0
   ema:
-    turn_on: false
+    turn_on: true
     rho: 0.01 # how much would ema be updated each step
     cur_recover: false
     ema_pred: true
