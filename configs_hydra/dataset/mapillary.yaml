@@ -1,0 +1,11 @@
+defaults:
+  - default.yaml
+
+test_scale_list_: [1024,512] # [1920,1080] # this dataset have different image sizes, in last paper, we resize to 1920, but it is too big for segformerb5, so this time we take 1024
+test_dataloader:
+  dataset:
+    data_prefix:
+      img_path: validation/images
+      seg_map_path: validation/labels
+    data_root: /data/Mapillary/
+    type: MapillaryDataset_v1

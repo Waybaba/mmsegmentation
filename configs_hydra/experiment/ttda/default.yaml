@@ -16,10 +16,7 @@ crop_size:
   _args_:
   - ${crop_size_list_} # e.g. [1024, 1024]
   _target_: builtins.tuple
-city_scale:
-  _args_:
-  - [1024, 512]
-  _target_: builtins.tuple
+
 gta_scale:
   _args_:
   - ${gta_scale_list_} # [1280, 720] if crop_size==[512, 512], [2560, 1440] if crop_size==[1024, 1024]

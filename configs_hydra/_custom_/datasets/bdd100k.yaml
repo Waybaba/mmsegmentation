@@ -13,7 +13,7 @@ gta_scale: &id004
   _args_:
   - ${gta_scale_list_} # [1280, 720] if crop_size==[512, 512], [2560, 1440] if crop_size==[1024, 1024]
   _target_: builtins.tuple
-city_scale:
+test_scale:
   _args_:
   - [1280, 720]
   _target_: builtins.tuple
@@ -32,7 +32,7 @@ test_dataloader:
     pipeline:
     - type: LoadImageFromFile
     - keep_ratio: true
-      scale: ${city_scale} # *id001
+      scale: ${test_scale} # *id001
       type: Resize
     - type: LoadAnnotations
     - type: PackSegInputs

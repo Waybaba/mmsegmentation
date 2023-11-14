@@ -14,7 +14,7 @@ test_dataloader:
     pipeline:
     - type: LoadImageFromFile
     - keep_ratio: true
-      scale: ${city_scale} # *id001
+      scale: ${test_scale} # *id001
       type: Resize
     - type: LoadAnnotations
     - type: PackSegInputs

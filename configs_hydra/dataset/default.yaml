@@ -1,6 +1,17 @@
+# default:
+  # - _self_
+  # - gta_source.yaml
+
+# TODO need improve: here, we fixed the source, which is not desired
 
 data_folder: /data
 img_ratios: [0.5, 0.75, 1.0, 1.25, 1.5, 1.75]
+
+test_scale_list_: ???
+test_scale:
+  _args_:
+  - ${dataset.test_scale_list_} # [1024, 512]
+  _target_: builtins.tuple
 
 test_dataloader:
   batch_size: 2
@@ -12,7 +23,7 @@ test_dataloader:
     pipeline:
     - type: LoadImageFromFile
     - keep_ratio: true
-      scale: ${city_scale} # *id001
+      scale: ${dataset.test_scale}
       type: Resize
     - type: LoadAnnotations
     - type: PackSegInputs
@@ -26,10 +37,16 @@ test_dataloader:
 train_dataloader:
   batch_size: 2
   dataset:
+    type: GTADataset
     data_prefix:
-      img_path: ???
-      seg_map_path: ???
-    data_root: ???
+      img_path: images
+      seg_map_path: labels
+    data_root: /data/GTA5
+    # type: ???
+    # data_prefix:
+    #   img_path: ???
+    #   seg_map_path: ???
+    # data_root: ???
     pipeline:
     - type: LoadImageFromFile
     - type: LoadAnnotations
@@ -47,7 +64,6 @@ train_dataloader:
       type: RandomFlip
     - type: PhotoMetricDistortion
     - type: PackSegInputs
-    type: ???
   num_workers: 2
   persistent_workers: true
   sampler:

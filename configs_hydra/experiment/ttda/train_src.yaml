@@ -15,7 +15,7 @@ crop_size:
   _args_:
   - ${crop_size_list_} # e.g. [1024, 1024]
   _target_: builtins.tuple
-city_scale:
+test_scale:
   _args_:
   - [1024, 512]
   _target_: builtins.tuple

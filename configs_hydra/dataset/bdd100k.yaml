@@ -1,6 +1,7 @@
 defaults:
   - default.yaml
 
+test_scale_list_: [1280, 720]
 test_dataloader:
   dataset:
     data_prefix:
@@ -8,10 +9,3 @@ test_dataloader:
       seg_map_path: labels/sem_seg/masks/val
     data_root: /data/BDD/
     type: BDD100KDataset
-train_dataloader:
-  dataset:
-    data_prefix:
-      img_path: images
-      seg_map_path: labels
-    data_root: /data/GTA5
-    type: GTADataset
