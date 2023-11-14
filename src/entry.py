@@ -3,12 +3,10 @@ import pyrootutils
 root = pyrootutils.setup_root(__file__, dotenv=True, pythonpath=True, indicator=[".env"])
 from mmengine.runner import Runner
 import hydra
-from mmseg.registry import RUNNERS
-from omegaconf import OmegaConf
 from omegaconf.dictconfig import DictConfig
 from omegaconf.listconfig import ListConfig
-from mmengine.config import Config, DictAction
-import src.ttda
+from mmengine.config import Config
+from src import ttda
 import wandb
 from copy import deepcopy
 
@@ -75,42 +73,42 @@ def main(cfg):
     
     # set tta
     if hasattr(cfg, "tta") and cfg.tta:
-        cfg.test_dataloader.dataset.pipeline = cfg.tta_pipeline # the following two is commeted, since I would like to handle this in the original function. see utils/test.py for original setting
+        cfg.dataset.test_dataloader.dataset.pipeline = cfg.dataset.tta_pipeline # the following two is commeted, since I would like to handle this in the original function. see utils/test.py for original setting
     
     # build the runner from config
     if 'runner_type' not in cfg:
         # build the default runner
-        runner = Runner.from_cfg(cfg)
+        # runner = Runner.from_cfg(cfg)
         cfg_ = deepcopy(cfg)
-        # runner = Runner(
-        #     model=cfg_['model'],
-        #     work_dir=cfg_['work_dir'],
-        #     train_dataloader=cfg_.get('train_dataloader'),
-        #     val_dataloader=cfg_.get('val_dataloader'),
-        #     test_dataloader=cfg_.get('test_dataloader'),
-        #     train_cfg=cfg_.get('train_cfg'),
-        #     val_cfg=cfg_.get('val_cfg'),
-        #     test_cfg=cfg_.get('test_cfg'),
-        #     auto_scale_lr=cfg_.get('auto_scale_lr'),
-        #     optim_wrapper=cfg_.get('optim_wrapper'),
-        #     param_scheduler=cfg_.get('param_scheduler'),
-        #     val_evaluator=cfg_.get('val_evaluator'),
-        #     test_evaluator=cfg_.get('test_evaluator'),
-        #     default_hooks=cfg_.get('default_hooks'),
-        #     custom_hooks=cfg_.get('custom_hooks'),
-        #     data_preprocessor=cfg_.get('data_preprocessor'),
-        #     load_from=cfg_.get('load_from'),
-        #     resume=cfg_.get('resume', False),
-        #     launcher=cfg_.get('launcher', 'none'),
-        #     env_cfg=cfg_.get('env_cfg'),  # type: ignore
-        #     log_processor=cfg_.get('log_processor'),
-        #     log_level=cfg_.get('log_level', 'INFO'),
-        #     visualizer=cfg_.get('visualizer'),
-        #     default_scope=cfg_.get('default_scope', 'mmengine'),
-        #     randomness=cfg_.get('randomness', dict(seed=None)),
-        #     experiment_name=cfg_.get('experiment_name'),
-        #     cfg=cfg_,
-        # )
+        runner = Runner(
+            model=cfg_['model'],
+            work_dir=cfg_['work_dir'],
+            train_dataloader=cfg_['dataset']['train_dataloader'],
+            val_dataloader=cfg_['dataset']['val_dataloader'],
+            test_dataloader=cfg_['dataset']['test_dataloader'],
+            train_cfg=cfg_.get('train_cfg'),
+            val_cfg=cfg_.get('val_cfg'),
+            test_cfg=cfg_.get('test_cfg'),
+            auto_scale_lr=cfg_.get('auto_scale_lr'),
+            optim_wrapper=cfg_.get('optim_wrapper'),
+            param_scheduler=cfg_.get('param_scheduler'),
+            val_evaluator=cfg_['dataset']['val_evaluator'],
+            test_evaluator=cfg_['dataset']['test_evaluator'],
+            default_hooks=cfg_.get('default_hooks'),
+            custom_hooks=cfg_.get('custom_hooks'),
+            data_preprocessor=cfg_['model']['data_preprocessor'],
+            load_from=cfg_.get('load_from'),
+            resume=cfg_.get('resume', False),
+            launcher=cfg_.get('launcher', 'none'), # ?
+            env_cfg=cfg_.get('env_cfg'),  # type: ignore
+            log_processor=cfg_.get('log_processor'),
+            log_level=cfg_.get('log_level', 'INFO'),
+            visualizer=cfg_.get('visualizer'),
+            default_scope=cfg_.get('default_scope', 'mmengine'),
+            randomness={"seed": cfg_.get('seed', None)},
+            experiment_name=cfg_.get('task_name'),
+            cfg=cfg_,
+        )
     else:
         # build customized runner from the registry
         # if 'runner_type' is set in the cfg

@@ -7,6 +7,7 @@ defaults:
   - hydra: default.yaml
   - paths: default.yaml
   - dataset: null
+  - model: null
   - _custom_: null
   - _base_: null
 

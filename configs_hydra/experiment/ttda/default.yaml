@@ -1,5 +1,106 @@
 # @package _global_
 
+defaults:
+  - override /model: segformer_b0.yaml
+  - override /dataset: gta2cityscapes.yaml
+  - _self_
+
+
+### global_cfg
+crop_size_list_: ??? # [512, 512] or [1024, 1024]
+stride_list_: ???
+gta_scale_list_: ???
+crop_size:
+  _args_:
+  - ${crop_size_list_} # e.g. [1024, 1024]
+  _target_: builtins.tuple
+city_scale:
+  _args_:
+  - [1024, 512]
+  _target_: builtins.tuple
+gta_scale:
+  _args_:
+  - ${gta_scale_list_} # [1280, 720] if crop_size==[512, 512], [2560, 1440] if crop_size==[1024, 1024]
+  _target_: builtins.tuple
+
+
+default_hooks:
+  checkpoint:
+    by_epoch: false
+    interval: 16000
+    type: CheckpointHook
+  logger:
+    interval: 10
+    log_metric_by_epoch: false
+    type: LoggerHook
+  param_scheduler:
+    type: ParamSchedulerHook
+  sampler_seed:
+    type: DistSamplerSeedHook
+  timer:
+    type: IterTimerHook
+  visualization:
+    type: SegVisualizationHook
+    draw: ??? # true
+    interval: ??? # draw seg figure
+
+custom_hooks:
+  # - ${ttda_hook} # ! change ttda_hook.xxx so that could be logged in wandb
+  - type: TTDABeforeRunInitHook
+
+dataset: 
+  train_dataloader: # ! to dataset?
+    batch_size: 1
+    num_workers: 4
+  val_dataloader:
+    batch_size: 1
+    num_workers: 4
+  test_dataloader:
+    batch_size: 1
+    num_workers: 4
+
+param_scheduler:
+  - begin: 0
+    by_epoch: false
+    end: 160000
+    eta_min: 0.0001
+    power: 0.9
+    type: PolyLR
+
+optim_wrapper:
+  type: OptimWrapper
+  optimizer:
+    betas:
+      _args_:
+      - [0.9, 0.999]
+      _target_: builtins.tuple
+    lr: 6.0e-05
+    type: AdamW
+    weight_decay: 0.01
+  paramwise_cfg:
+    custom_keys:
+      pos_block: # this one is from mmseg
+        decay_mult: 0.0
+      .norm: # ! since we can not have . in name
+        lr_mult: ${norm_lr_mult} # ! how to decide order?
+      head:
+        lr_mult: 0.0
+      back:
+        lr_mult: 0.0 # does not train backbone
+      token_prompt:
+        lr_mult: 0.0
+      tpt_gates: 
+        lr_mult: 0.0
+      visual_prompt_module:
+        lr_mult: 0.0
+      fusion_conv:
+        lr_mult: 0.0
+
+norm_lr_mult: 1.0
+
+
+
+
 test_cfg:
   type: TestLoopWrapper
   slide_adapt: ???
@@ -73,33 +174,18 @@ test_cfg:
   ema:
     turn_on: true
     rho: 0.01 # how much would ema be updated each step
-    cur_recover: true
+    cur_recover: false
     ema_pred: true
   debug:
     use_mmseg_pseudo_loss: ???
 
+train_cfg:
+  max_iters: 160000
+  type: IterBasedTrainLoop
+  val_interval: 16000
+val_cfg:
+  type: ValLoop
 
-optim_wrapper:
-  paramwise_cfg:
-    custom_keys:
-      .norm: # ! since we can not have . in name
-        lr_mult: ${norm_lr_mult} # ! how to decide order?
-      head:
-        lr_mult: 0.0
-      back:
-        lr_mult: 0.0 # does not train backbone
-      token_prompt:
-        lr_mult: 0.0
-      tpt_gates: 
-        lr_mult: 0.0
-      visual_prompt_module:
-        lr_mult: 0.0
-      fusion_conv:
-        lr_mult: 0.0
-norm_lr_mult: 1.0
-
-
-### TPT
 model:
   type: EncoderDecoderWrapper
   backbone:
@@ -115,22 +201,40 @@ model:
       prompt_size: 3
       res_add: 1
       weight_init_type: normal # "normal" 
-
 tta: true
 
 
-custom_hooks:
-  # - ${ttda_hook} # ! change ttda_hook.xxx so that could be logged in wandb
-  - type: TTDABeforeRunInitHook
-default_hooks:
-  visualization:
-    draw: ??? # true
-    interval: ??? # draw seg figure
-  logger:
-    interval: 10
-train_cfg:
-  val_interval: 100 # not used since this is TTDA
-load_from: ??? # ! load from mmseg model
+
+
+## runtime
+default_scope: mmseg
+env_cfg:
+  cudnn_benchmark: true
+  dist_cfg:
+    backend: nccl
+  mp_cfg:
+    mp_start_method: fork
+    opencv_num_threads: 0
+load_from: ???
+log_level: INFO
+log_processor:
+  by_epoch: false
+resume: false
+tta_model:
+  type: SegTTAModel
+visualizer:
+  name: visualizer
+  type: SegLocalVisualizer
+  vis_backends:
+  - type: LocalVisBackend
+  - init_kwargs:
+      mode: ${wandb.mode}
+      project: ${task_name}
+      entity: ${oc.env:WANDB_ENTITY}
+      tags: ${tags}
+    type: WandbVisBackend
+
+
 train: false
 test: true
 tags: [ttda_debug]

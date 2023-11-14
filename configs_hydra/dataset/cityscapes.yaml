@@ -1,0 +1,17 @@
+defaults:
+  ./default.yaml
+
+test_dataloader:
+  dataset:
+    data_prefix:
+      img_path: leftImg8bit/val
+      seg_map_path: gtFine/val
+    data_root: /data/Cityscapes/
+    type: CityscapesDataset
+train_dataloader:
+  dataset:
+    data_prefix:
+      img_path: images
+      seg_map_path: labels
+    data_root: /data/GTA5
+    type: GTADataset

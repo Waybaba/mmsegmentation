@@ -1,0 +1,11 @@
+defaults:
+  - segformer.yaml
+
+
+backbone:
+  embed_dims: 64
+  init_cfg:
+    checkpoint: https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/segformer/mit_b1_20220624-02e5a6a1.pth
+    type: Pretrained
+decode_head:
+  in_channels: [64, 128, 320, 512]
