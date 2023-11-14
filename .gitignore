@@ -122,3 +122,5 @@ mmseg/.mim
 configs/amlt/latest.yaml
 /outputs
 /sam
+
+!.vscode

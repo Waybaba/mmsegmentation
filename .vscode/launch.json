@@ -1,0 +1,212 @@
+{
+	// Use IntelliSense to learn about possible attributes.
+	// Hover to view descriptions of existing attributes.
+	// For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"name": "Python: Current File",
+			"type": "python",
+			"request": "launch",
+			"program": "${file}",
+			"console": "integratedTerminal",
+			"justMyCode": true
+		},
+		// python src/demo_script.py
+		{
+			"name": "config",
+			"type": "python",
+			"request": "launch",
+			"program": "src/demo_script.py",
+			"console": "integratedTerminal",
+			"justMyCode": true,
+			"args": [
+				"src/demo_config.py",
+				"--cfg-options", 
+				"backbone.depth=101",
+			]
+		},
+		// train:
+		// python tools/train.py configs/deeplabv3/deeplabv3_r18-d8_4xb2-80k_cityscapes-512x1024.py
+		{
+			"name": "train",
+			"type": "python",
+			"request": "launch",
+			"program": "tools/train.py",
+			"console": "integratedTerminal",
+			"justMyCode": true,
+			// "noDebug": true,
+			"args": [
+				// "src/gtatrain_cfg.py",
+				// "src/cfgs/g2c_deeplabv3.py",
+				"src/cfgs/g2c_segformer.py",
+				// "src/cfgs/g2c_daformer.py",
+				// "src/cfgs/g2c_daformer_b0.py",
+				// "src/deeplabv3_r101-d8_4xb2-40k_cityscapes-512x1024.py",
+				// "configs/segformer/segformer_mit-b0_8xb1-160k_cityscapes-1024x1024.py",
+				// "configs/deeplabv3/deeplabv3_r18-d8_4xb2-80k_cityscapes-512x1024.py",
+				// "debug/pspnet_r50-d8_4xb2-40k_cityscapes-512x1024.py",
+				// "debug/pspnet_r50b-d32_512x1024_80k_cityscapes_20220311_152152-23bcaf8c.pth"
+				"--cfg-options",
+				"train_cfg.val_interval=2000",
+				"model.backbone.init_cfg.checkpoint=/data/models/SegFormer/211108_1622_gta2cs_daformer_s0_7f24c/mit_b5.pth",
+				// "vis_backends.1.init_kwargs.mode=online",
+				// "vis_backends.1.init_kwargs.tags=[test]",
+				// "vis_backends.1.init_kwargs.project=MMSEG",
+				// "vis_backends=[]"
+				"randomness.seed=8",
+				"default_hooks.visualization.draw=true",
+				"default_hooks.visualization.interval=100",
+				// "train_dataloader.batch_size=1",
+				// "tags=[a_test]"
+			]
+		},
+		// test:
+		// python tools/train.py configs/deeplabv3/deeplabv3_r18-d8_4xb2-80k_cityscapes-512x1024.py
+		{
+			"name": "test",
+			"type": "python",
+			"request": "launch",
+			"program": "tools/test.py",
+			"console": "integratedTerminal",
+			"justMyCode": true,
+			"args": [
+				"src/cfgs/g2c_daformer.py",
+			]
+		},
+		// hydra_entry
+		{
+			"name": "train_source",
+			"type": "python",
+			"request": "launch",
+			"program": "src/entry.py",
+			"console": "integratedTerminal",
+			"justMyCode": true,
+			"args": [
+				"experiment=ttda/deeplab_101_gta",
+				"crop_size_list_=[512,1024]",
+				// "stride_list_=[384,384]",
+				"gta_scale_list_=[1280,720]",
+				"model.test_cfg.mode=whole",
+				// ### log/save
+				"train_cfg.val_interval=50",
+				"++default_hooks.visualization.draw=true",
+				"++default_hooks.visualization.interval=25",
+				"++default_hooks.logger.interval=10",
+			]
+		},
+		// hydra_entry
+		{
+			"name": "hydra_entry",
+			"type": "python",
+			"request": "launch",
+			"program": "src/entry.py",
+			"console": "integratedTerminal",
+			"justMyCode": true,
+			"noDebug": true,
+			"args": [
+				// ### test strategy
+				"crop_size_list_=[512,512]",
+				"stride_list_=[384,384]",
+				"gta_scale_list_=[1280,720]",
+				"model.test_cfg.mode=whole",
+				"test_cfg.slide_adapt=false",
+				"++tta=true",
+				// ### log/save
+				"wandb.mode=online",
+				"train_cfg.val_interval=100",
+				"++default_hooks.visualization.draw=true",
+				"++default_hooks.visualization.interval=100",
+				"test_cfg.adapt_img_vis_freq=10",
+				// ### model 
+				"optim_wrapper.optimizer.lr=6e-3",
+				// "experiment=ttda/segformer_b0",
+				"experiment=ttda/segformer_b5",
+				// "experiment=ttda/deeplab_101_gta",
+				// "load_from=/output/hydra_log/MMSEG/multiruns/2023-10-14_02-59-29_015610/0/iter_64000.pth", // slide
+				"load_from=/output/hydra_log/MMSEG/multiruns/2023-10-14_06-42-21_981484/0/iter_160000.pth", // whole
+				// "load_from=/output/hydra_log/MMSEG/multiruns/2023-10-14_06-42-21_981484/0/iter_16000.pth", // whole
+				// "load_from=/output/hydra_log/MMSEG/multiruns/2023-10-14_03-00-04_359621/0/iter_64000.pth", // iter_144000
+				// ### debug
+				"++test_dataloader.dataset.indices=500",
+				// ### ttda
+				"test_cfg.proto_predict.turn_on=false",
+				"test_cfg.high_conf_mask.turn_on=true",
+				"test_cfg.sam_predict.turn_on=false",
+				"test_cfg.sam_model.turn_on=false",
+				"test_cfg.ema.turn_on=true",
+				"test_cfg.pseudo_label.turn_on=true",
+				// ### loss
+				"test_cfg.debug.use_mmseg_pseudo_loss=true",
+				// ### optmizer
+				// "optim_wrapper.paramwise_cfg.custom_keys.head.lr_mult=0.0",
+				// "optim_wrapper.paramwise_cfg.custom_keys.back.lr_mult=0.0",
+				// "optim_wrapper.paramwise_cfg.custom_keys.token_prompt.lr_mult=1.0",
+				// "optim_wrapper.paramwise_cfg.custom_keys.tpt_gates.lr_mult=10.0",
+				// "norm_lr_mult=1.0",
+				// temp
+			],
+		},
+		// deeplab_adapt
+		{
+			"name": "deeplab_test",
+			"type": "python",
+			"request": "launch",
+			"program": "src/entry.py",
+			"console": "integratedTerminal",
+			"justMyCode": true,
+			"args": [
+				// ### test strategy
+				"crop_size_list_=[512,512]",
+				"gta_scale_list_=[1280,720]",
+				"model.test_cfg.mode=whole",
+				// ### log/save
+				// "train_cfg.val_interval=100",
+				"++default_hooks.visualization.draw=true",
+				"++default_hooks.visualization.interval=100",
+				"default_hooks.logger.interval=10",
+				// ### model
+				"optim_wrapper.optimizer.lr=6e-3",
+				"experiment=ttda/deeplab_adapt_new",
+				"load_from=/output/hydra_log/MMSEG_Src/multiruns/2023-11-01_05-30-17_095851/0/iter_16000.pth", // deeplab 33
+				// "load_from=/output/hydra_log/MMSEG/multiruns/2023-10-14_02-59-29_015610/0/iter_64000.pth", // slide
+				// ### misc
+				"wandb.mode=online",
+				// ### debug
+				"++test_dataloader.dataset.indices=20",
+				// ### slide or whole
+				"test_cfg.slide_adapt=false",
+				"model.test_cfg.mode=whole", 
+				// ### ttda
+				"test_cfg.proto_predict.turn_on=false",
+				"test_cfg.high_conf_mask.turn_on=true",
+				"test_cfg.sam_predict.turn_on=false",
+				"test_cfg.debug.use_mmseg_pseudo_loss=true",
+				"test_cfg.ema.turn_on=true",
+				"test_cfg.adapt_img_vis_freq=10",
+				"test_cfg.pseudo_label.turn_on=true",
+				// optmizer
+				"optim_wrapper.paramwise_cfg.custom_keys.head.lr_mult=0.0",
+				"optim_wrapper.paramwise_cfg.custom_keys.back.lr_mult=0.0",
+				"optim_wrapper.paramwise_cfg.custom_keys.token_prompt.lr_mult=0.0",
+				"optim_wrapper.paramwise_cfg.custom_keys.tpt_gates.lr_mult=0.0",
+				"norm_lr_mult=1.0",
+				// temp
+				"train=false",
+				"test=true",
+				// "model.backbone.tpt_cfg.num_tokens=10",
+			],
+		},
+		// convert
+		{
+			"name": "convert_cfg",
+			"type": "python",
+			"request": "launch",
+			"program": "src/convert_cfg.py",
+			"console": "integratedTerminal",
+			"justMyCode": true,
+			"args": [
+			]
+		},
+	]
+}
