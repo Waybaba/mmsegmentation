@@ -1908,9 +1908,8 @@ class TestLoopWrapper(TestLoop):
 
 		### adapt - data_batch_for_adapt
 		with torch.enable_grad():
-			optim_wrapper = runner.optim_wrapper
 			model = runner.model
-			with optim_wrapper.optim_context(model):
+			with runner.optim_wrapper.optim_context(model):
 				data_batch_for_adapt = model.data_preprocessor(data_batch_for_adapt, True)
 				if self.kwargs.debug.use_mmseg_pseudo_loss:
 					losses = model._run_forward(data_batch_for_adapt, mode='loss')  # type: ignore
@@ -1994,12 +1993,11 @@ class TestLoopWrapper(TestLoop):
 					
 					losses = add_prefix(losses, 'decode')
 
-
 				if model.with_auxiliary_head: assert NotImplementedError("see the class function for this branch")
 				if losses:
 					parsed_losses, log_vars = model.parse_losses(losses)  # sum all element with loss in
 					to_logs.update(log_vars)
-					optim_wrapper.update_params(parsed_losses)
+					runner.optim_wrapper.update_params(parsed_losses)
 
 
 		### draw

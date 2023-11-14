@@ -138,7 +138,7 @@
 				"test_cfg.pseudo_label.turn_on=true",
 				// ### loss
 				"test_cfg.debug.use_mmseg_pseudo_loss=true",
-				"seed=1"
+				"seed=5"
 				// ### optmizer
 				// "optim_wrapper.paramwise_cfg.custom_keys.head.lr_mult=0.0",
 				// "optim_wrapper.paramwise_cfg.custom_keys.back.lr_mult=0.0",
