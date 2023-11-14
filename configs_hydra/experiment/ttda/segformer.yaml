@@ -5,8 +5,8 @@ defaults:
 - /_custom_/datasets: gta2cityscapes.yaml
 - /_base_/default_runtime.yaml
 - /_base_/schedules_nooptim: schedule_160k.yaml
-- ./ttda.yaml
 - optim: ttda.yaml
+- ./ttda.yaml
 
 crop_size_list_: ??? # [512, 512] or [1024, 1024]
 stride_list_: ???
