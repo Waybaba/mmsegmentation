@@ -1,8 +1,10 @@
 # @package _global_
 
 defaults:
-  - override /model: segformer_b0.yaml
-  - override /dataset: gta2cityscapes.yaml
+  # - override /model: segformer_b0.yaml
+  # - override /dataset: gta2cityscapes.yaml
+  - override /model: null
+  - override /dataset: null
   - _self_
 
 
