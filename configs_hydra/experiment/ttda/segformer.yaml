@@ -3,6 +3,7 @@
 defaults:
 - /_base_/models: segformer_mit-b0.yaml
 - /_custom_/datasets: gta2cityscapes.yaml
+# - /_custom_/datasets: bdd100k.yaml
 - /_base_/default_runtime.yaml
 - /_base_/schedules_nooptim: schedule_160k.yaml
 - optim: ttda.yaml
