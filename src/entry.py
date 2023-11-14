@@ -10,6 +10,7 @@ from omegaconf.listconfig import ListConfig
 from mmengine.config import Config, DictAction
 import src.ttda
 import wandb
+from copy import deepcopy
 
 def parse_tuple(cfg):
     """
@@ -80,10 +81,41 @@ def main(cfg):
     if 'runner_type' not in cfg:
         # build the default runner
         runner = Runner.from_cfg(cfg)
+        cfg_ = deepcopy(cfg)
+        # runner = Runner(
+        #     model=cfg_['model'],
+        #     work_dir=cfg_['work_dir'],
+        #     train_dataloader=cfg_.get('train_dataloader'),
+        #     val_dataloader=cfg_.get('val_dataloader'),
+        #     test_dataloader=cfg_.get('test_dataloader'),
+        #     train_cfg=cfg_.get('train_cfg'),
+        #     val_cfg=cfg_.get('val_cfg'),
+        #     test_cfg=cfg_.get('test_cfg'),
+        #     auto_scale_lr=cfg_.get('auto_scale_lr'),
+        #     optim_wrapper=cfg_.get('optim_wrapper'),
+        #     param_scheduler=cfg_.get('param_scheduler'),
+        #     val_evaluator=cfg_.get('val_evaluator'),
+        #     test_evaluator=cfg_.get('test_evaluator'),
+        #     default_hooks=cfg_.get('default_hooks'),
+        #     custom_hooks=cfg_.get('custom_hooks'),
+        #     data_preprocessor=cfg_.get('data_preprocessor'),
+        #     load_from=cfg_.get('load_from'),
+        #     resume=cfg_.get('resume', False),
+        #     launcher=cfg_.get('launcher', 'none'),
+        #     env_cfg=cfg_.get('env_cfg'),  # type: ignore
+        #     log_processor=cfg_.get('log_processor'),
+        #     log_level=cfg_.get('log_level', 'INFO'),
+        #     visualizer=cfg_.get('visualizer'),
+        #     default_scope=cfg_.get('default_scope', 'mmengine'),
+        #     randomness=cfg_.get('randomness', dict(seed=None)),
+        #     experiment_name=cfg_.get('experiment_name'),
+        #     cfg=cfg_,
+        # )
     else:
         # build customized runner from the registry
         # if 'runner_type' is set in the cfg
-        runner = RUNNERS.build(cfg)
+        # runner = RUNNERS.build(cfg)
+        raise NotImplementedError("runner_type is not supported yet")
 
     # start training
     if cfg.train:  runner.train()

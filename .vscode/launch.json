@@ -103,7 +103,7 @@
 			"program": "src/entry.py",
 			"console": "integratedTerminal",
 			"justMyCode": true,
-			"noDebug": true,
+			"noDebug": false,
 			"args": [
 				// ### test strategy
 				"crop_size_list_=[512,512]",
@@ -113,7 +113,7 @@
 				"test_cfg.slide_adapt=false",
 				"++tta=true",
 				// ### log/save
-				"wandb.mode=online",
+				"wandb.mode=disabled",
 				"train_cfg.val_interval=100",
 				"++default_hooks.visualization.draw=true",
 				"++default_hooks.visualization.interval=100",

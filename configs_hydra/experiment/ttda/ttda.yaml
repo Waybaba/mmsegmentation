@@ -2,6 +2,8 @@
 
 test_cfg:
   type: TestLoopWrapper
+  slide_adapt: ???
+  adapt_img_vis_freq: ??? # for adapt, can see the proto for learning
   pseudo_label:
     turn_on: true
     type: ema # ori, cur, ema # remember to turn on ema
@@ -71,10 +73,8 @@ test_cfg:
   ema:
     turn_on: true
     rho: 0.01 # how much would ema be updated each step
-    cur_recover: false
+    cur_recover: true
     ema_pred: true
-  slide_adapt: ???
-  adapt_img_vis_freq: ??? # for adapt, can see the proto for learning
   debug:
     use_mmseg_pseudo_loss: ???
 
