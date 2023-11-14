@@ -1761,6 +1761,16 @@ class TestLoopWrapper(TestLoop):
 			self.model_ema = param_migrate(self.model_ema, runner.model, self.kwargs.ema.rho) # update ema
 			if self.kwargs.ema.cur_recover:
 				runner.model = param_migrate(runner.model, self.model_ema, 1.0) # model to ema
+				if not hasattr(self, "optim_state_dict_first"): # reset optimizer state to avoid mistake Adam ...
+					self.optim_state_dict_first = deepcopy(runner.optim_wrapper.state_dict()) 
+				else:
+					runner.optim_wrapper.load_state_dict(self.optim_state_dict_first)
+				# runner.optim_wrapper = runner.build_optim_wrapper(runner.optim_wrapper)
+				# runner.scale_lr(runner.optim_wrapper, runner.auto_scale_lr)
+				# if runner.param_schedulers is not None:
+				# 	runner.param_schedulers = runner.build_param_scheduler(  # type: ignore
+				# 		runner.param_schedulers)  # type: ignore
+			
 
 		### pseudo label
 		# -> batch_pseudoed
