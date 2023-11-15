@@ -48,6 +48,8 @@ from mmengine.registry import LOOPS
 from scipy.ndimage import label, find_objects
 from mmengine.runner.loops import TestLoop
 from mmengine.runner.amp import autocast
+from mmengine.optim import build_optim_wrapper
+
 EPS = 1e-10
 
 
@@ -569,6 +571,7 @@ class TTDABeforeRunInitHook(Hook):
 
 		# `build_optimizer` should be called before `build_param_scheduler`
 		#  because the latter depends on the former
+		runner.optim_wrapper_cfg = deepcopy(runner.optim_wrapper)
 		runner.optim_wrapper = runner.build_optim_wrapper(runner.optim_wrapper)
 		# Automatically scaling lr by linear scaling rule
 		runner.scale_lr(runner.optim_wrapper, runner.auto_scale_lr)
@@ -1766,12 +1769,14 @@ class TestLoopWrapper(TestLoop):
 					self.optim_state_dict_first = deepcopy(runner.optim_wrapper.state_dict()) 
 				else:
 					runner.optim_wrapper.load_state_dict(self.optim_state_dict_first)
-				# runner.optim_wrapper = runner.build_optim_wrapper(runner.optim_wrapper)
-				# runner.scale_lr(runner.optim_wrapper, runner.auto_scale_lr)
-				# if runner.param_schedulers is not None:
-				# 	runner.param_schedulers = runner.build_param_scheduler(  # type: ignore
-				# 		runner.param_schedulers)  # type: ignore
-			
+			if self.kwargs.ema.mid_pred:
+				assert not self.kwargs.ema.cur_recover, f"ema.cur_recover and ema.mid_pred can not be True at the same time"
+				if not hasattr(self, "model_mid"): # init self.model_ema
+					self.model_mid = deepcopy(runner.model)
+					self.optim_wrapper_mid = build_optim_wrapper(self.model_mid, runner.optim_wrapper_cfg)
+					for group in self.optim_wrapper_mid.optimizer.param_groups:
+						group['lr'] = group['lr'] * self.kwargs.ema.mid_lr_scale
+				self.model_mid = param_migrate(self.model_mid, self.model_ema, 1.0) # update ema
 
 		### pseudo label
 		# -> batch_pseudoed
@@ -2009,6 +2014,13 @@ class TestLoopWrapper(TestLoop):
 					parsed_losses, log_vars = model.parse_losses(losses)  # sum all element with loss in
 					to_logs.update(log_vars)
 					runner.optim_wrapper.update_params(parsed_losses)
+			if self.kwargs.ema.mid_pred:
+				for _ in range(self.kwargs.ema.mid_update_times):
+					with self.optim_wrapper_mid.optim_context(self.model_mid):
+						losses_mid = self.model_mid._run_forward(data_batch_for_adapt, mode='loss')  # type: ignore
+						parsed_losses, log_vars = model.parse_losses(losses_mid)  # sum all element with loss in
+						self.optim_wrapper_mid.update_params(parsed_losses)
+				to_logs.update(add_prefix(log_vars, "mid_"))
 
 
 		### draw
@@ -2234,8 +2246,13 @@ class TestLoopWrapper(TestLoop):
 
 		# predictions should be sequence of BaseDataElement
 		with autocast(enabled=self.fp16):
-			if self.kwargs.ema.turn_on and self.kwargs.ema.ema_pred:
-				outputs_test = self.model_ema.test_step(data_batch)
+			if self.kwargs.ema.turn_on:
+				# ema.ema_pred and ema.mid_pred can not be true at the same time
+				assert not self.kwargs.ema.ema_pred or not self.kwargs.ema.mid_pred, "ema_pred and mid_pred can not be true at the same time"
+				if self.kwargs.ema.ema_pred:
+					outputs_test = self.model_ema.test_step(data_batch)
+				elif self.kwargs.ema.mid_pred:
+					outputs_test = self.model_mid.test_step(data_batch)
 			else:
 				outputs_test = self.runner.model.test_step(data_batch)
 		self.evaluator.process(data_samples=outputs_test, data_batch=data_batch)
@@ -2244,4 +2261,5 @@ class TestLoopWrapper(TestLoop):
 			batch_idx=idx,
 			data_batch=data_batch,
 			outputs=outputs_test)
+
 

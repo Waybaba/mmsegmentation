@@ -108,7 +108,10 @@ test_cfg:
     turn_on: true
     rho: 0.01 # how much would ema be updated each step
     cur_recover: false
-    ema_pred: true
+    ema_pred: false
+    mid_pred: true
+    mid_lr_scale: 5.0 # instance adapt need larger lr
+    mid_update_times: 5 # 
   debug:
     use_mmseg_pseudo_loss: ???
 
