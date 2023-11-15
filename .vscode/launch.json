@@ -106,7 +106,7 @@
 			"noDebug": false,
 			"args": [
 				// TEMP
-				"tta=true",
+				"tta=false",
 				// ### test strategy
 				"crop_size_list_=[512,512]",
 				"stride_list_=[384,384]",
@@ -122,7 +122,7 @@
 				"optim_wrapper.optimizer.lr=6e-3",
 				"experiment=ttda/default",
 				"model=segformer_b5",
-				"dataset=cityscapes",
+				"dataset=bdd100k", // cityscapes, mapillary, bdd100k
 				// "load_from=/output/hydra_log/MMSEG/multiruns/2023-10-14_02-59-29_015610/0/iter_64000.pth", // slide
 				"load_from=/output/hydra_log/MMSEG/multiruns/2023-10-14_06-42-21_981484/0/iter_160000.pth", // whole
 				// "load_from=/output/hydra_log/MMSEG/multiruns/2023-10-14_06-42-21_981484/0/iter_16000.pth", // whole

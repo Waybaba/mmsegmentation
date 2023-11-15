@@ -310,6 +310,12 @@ class BaseDecodeHead(BaseModule, metaclass=ABCMeta):
             size=seg_label.shape[2:],
             mode='bilinear',
             align_corners=self.align_corners)
+        # seg_label = resize(  # ! @waybaba
+        #     input=seg_label.float(),
+        #     size=seg_logits.shape[2:],
+        #     mode='nearest',
+        #     # align_corners=self.align_corners,
+        # ).long()
         if self.sampler is not None:
             seg_weight = self.sampler.sample(seg_logits, seg_label)
         else:
@@ -336,6 +342,9 @@ class BaseDecodeHead(BaseModule, metaclass=ABCMeta):
 
         loss['acc_seg'] = accuracy(
             seg_logits, seg_label, ignore_index=self.ignore_index)
+        #! @waybaba
+        # iou_metric = IoUMetricWrapper(iou_metrics="mIoU")
+        # loss['iou_seg'] = iou_metric.process(data_samples=outputs_test, data_batch=data_batch)
         return loss
 
     def predict_by_feat(self, seg_logits: Tensor,

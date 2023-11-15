@@ -1278,14 +1278,14 @@ class EncoderDecoderWrapper(EncoderDecoder):
 					i_feats = i_feats.flip(dims=(3, ))
 				else:
 					i_feats = i_feats.flip(dims=(2, ))
-
+			i_feats = i_feats.squeeze(0)
 			# resize as original shape
-			i_feats = resize(
-				i_feats,
-				size=img_meta['ori_shape'],
-				mode='bilinear',
-				align_corners=self.align_corners,
-				warning=False).squeeze(0)
+			# i_feats = resize( # ! this should be uncomment to make related code works
+			# 	i_feats.unsqueeze(0)
+			# 	size=img_meta['ori_shape'],
+			# 	mode='bilinear',
+			# 	align_corners=self.align_corners,
+			# 	warning=False).squeeze(0)
 			res[i].feats = PixelData()
 			res[i].feats.data = i_feats
 
@@ -1693,6 +1693,7 @@ class TestLoopWrapper(TestLoop):
 		assert sum([self.kwargs.proto_predict.turn_on, self.kwargs.sam_predict.turn_on, self.kwargs.sam_model.turn_on]) <= 1, \
 			"only one of proto_predict, sam_predict, sam_model should be on"
 		if self.kwargs.proto_predict.turn_on:
+			raise ValueError("I change the feats dimmention to original, need to recover it to make this work")
 			runner.model.test_step = partial(runner.model.test_step_proto_predict, cfg=self.kwargs.proto_predict)
 		elif self.kwargs.sam_predict.turn_on:
 			runner.model.test_step = partial(runner.model.test_step_sam_predict, cfg=self.kwargs.sam_predict)
