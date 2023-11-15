@@ -1,0 +1,11 @@
+defaults:
+  - default.yaml
+
+test_scale_list_: [1024, 512] # TODO need to verify
+test_dataloader:
+  dataset:
+    data_prefix:
+      img_path: Rio/Images/Test
+      seg_map_path: Rio/Labels/Test
+    data_root: /data/NTHU/
+    type: CrosscityDataset

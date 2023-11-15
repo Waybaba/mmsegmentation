@@ -1,11 +1,11 @@
 defaults:
   - default.yaml
 
-test_scale_list_: ???
+test_scale_list_: [1920,1080] # TODO need to verify
 test_dataloader:
   dataset:
     data_prefix:
       img_path: leftImg8bit/val
       seg_map_path: gtFine/val
-    data_root: /data/Cityscapes/
-    type: CityscapesDataset
+    data_root: /data/IDD/
+    type: IDDDataset

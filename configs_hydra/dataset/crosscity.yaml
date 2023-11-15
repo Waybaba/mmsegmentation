@@ -1,11 +1,185 @@
-defaults:
-  - default.yaml
 
-test_scale_list_: ???
+# ! TODO this is not a good implementation, since when we modify default.yaml, we need to change here
+# ! The problem is that we need mix four subset
+
+data_folder: /data
+img_ratios: [0.5, 0.75, 1.0, 1.25, 1.5, 1.75]
+
+# test_scale_list_: ???
+test_scale_list_: [1024, 512] # TODO need to verify
+
+
+
+test_scale:
+  _args_:
+  - ${dataset.test_scale_list_} # [1024, 512]
+  _target_: builtins.tuple
+
 test_dataloader:
+  batch_size: 2
   dataset:
+    type: ConcatDataset
+    datasets:
+      - data_prefix:
+          img_path: Rio/Images/Test
+          seg_map_path: Rio/Labels/Test
+        data_root: /data/NTHU/
+        pipeline:
+        - type: LoadImageFromFile
+        - keep_ratio: true
+          scale: ${dataset.test_scale}
+          type: Resize
+        - type: LoadAnnotations
+        - type: PackSegInputs
+        type: CrosscityDataset
+      - data_prefix:
+          img_path: Rome/Images/Test
+          seg_map_path: Rome/Labels/Test
+        data_root: /data/NTHU/
+        pipeline:
+        - type: LoadImageFromFile
+        - keep_ratio: true
+          scale: ${dataset.test_scale}
+          type: Resize
+        - type: LoadAnnotations
+        - type: PackSegInputs
+        type: CrosscityDataset
+      - data_prefix:
+          img_path: Taipei/Images/Test
+          seg_map_path: Taipei/Labels/Test
+        data_root: /data/NTHU/
+        pipeline:
+        - type: LoadImageFromFile
+        - keep_ratio: true
+          scale: ${dataset.test_scale}
+          type: Resize
+        - type: LoadAnnotations
+        - type: PackSegInputs
+        type: CrosscityDataset
+      - data_prefix:
+          img_path: Tokyo/Images/Test
+          seg_map_path: Tokyo/Labels/Test
+        data_root: /data/NTHU/
+        pipeline:
+        - type: LoadImageFromFile
+        - keep_ratio: true
+          scale: ${dataset.test_scale}
+          type: Resize
+        - type: LoadAnnotations
+        - type: PackSegInputs
+        type: CrosscityDataset
+  num_workers: 2
+  persistent_workers: true
+  sampler:
+    shuffle: false
+    type: DefaultSampler
+
+train_dataloader:
+  batch_size: 2
+  dataset:
+    type: GTADataset
     data_prefix:
-      img_path: leftImg8bit/val
-      seg_map_path: gtFine/val
-    data_root: /data/Cityscapes/
-    type: CityscapesDataset
+      img_path: images
+      seg_map_path: labels
+    data_root: /data/GTA5
+    # type: ???
+    # data_prefix:
+    #   img_path: ???
+    #   seg_map_path: ???
+    # data_root: ???
+    pipeline:
+    - type: LoadImageFromFile
+    - type: LoadAnnotations
+    - keep_ratio: true
+      ratio_range: &id003
+        _args_:
+        - [0.5, 2.0]
+        _target_: builtins.tuple
+      scale: ${gta_scale}
+      type: RandomResize
+    - cat_max_ratio: 0.75
+      crop_size: ${crop_size} # *id002
+      type: RandomCrop
+    - prob: 0.5
+      type: RandomFlip
+    - type: PhotoMetricDistortion
+    - type: PackSegInputs
+  num_workers: 2
+  persistent_workers: true
+  sampler:
+    shuffle: true
+    type: InfiniteSampler
+
+test_evaluator:
+  iou_metrics:
+    - mIoU
+  type: IoUMetricWrapper
+tta_pipeline:
+  - backend_args: null
+    type: LoadImageFromFile
+  - transforms:
+    - - type: Resize
+        scale: ${dataset.test_scale}
+        keep_ratio: true
+    - - keep_ratio: true
+        scale_factor: 1.0
+        type: Resize
+      - keep_ratio: true
+        scale_factor: 0.75
+        type: Resize
+      - keep_ratio: true
+        scale_factor: 0.5
+        type: Resize
+      - keep_ratio: true
+        scale_factor: 1.25
+        type: Resize
+      - keep_ratio: true
+        scale_factor: 1.5
+        type: Resize
+    # - - keep_ratio: true
+    #     scale_factor: 0.5
+    #     type: Resize
+    #   - keep_ratio: true
+    #     scale_factor: 0.375
+    #     type: Resize
+    #   - keep_ratio: true
+    #     scale_factor: 0.25
+    #     type: Resize
+    #   - keep_ratio: true
+    #     scale_factor: 0.625
+    #     type: Resize
+    #   - keep_ratio: true
+    #     scale_factor: 0.75
+    #     type: Resize
+      # - keep_ratio: true
+      #   scale_factor: 0.875
+      #   type: Resize
+    # - - keep_ratio: true
+    #     scale_factor: 0.5
+    #     type: Resize
+    #   - keep_ratio: true
+    #     scale_factor: 0.75
+    #     type: Resize
+    #   - keep_ratio: true
+    #     scale_factor: 1.0
+    #     type: Resize
+    #   - keep_ratio: true
+    #     scale_factor: 1.25
+    #     type: Resize
+    #   - keep_ratio: true
+    #     scale_factor: 1.5
+    #     type: Resize
+    #   - keep_ratio: true
+    #     scale_factor: 1.75
+    #     type: Resize
+    - - direction: horizontal
+        prob: 0.0
+        type: RandomFlip
+      # - direction: horizontal
+      #   prob: 1.0
+      #   type: RandomFlip
+    - - type: LoadAnnotations
+    - - type: PackSegInputs
+    type: TestTimeAug
+val_dataloader: ${dataset.test_dataloader}
+val_evaluator: ${dataset.test_evaluator}

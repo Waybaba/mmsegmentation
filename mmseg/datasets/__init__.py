@@ -27,6 +27,8 @@ from .stare import STAREDataset
 from .synapse import SynapseDataset
 from .gta import GTADataset
 from .synthia import SynthiaDataset
+from .idd import IDDDataset
+from .crosscity import CrosscityDataset
 # yapf: disable
 from .transforms import (CLAHE, AdjustGamma, Albu, BioMedical3DPad,
                          BioMedical3DRandomCrop, BioMedical3DRandomFlip,

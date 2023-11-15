@@ -5,7 +5,8 @@ from mmseg.registry import DATASETS
 
 
 @DATASETS.register_module()
-class BDD100KDataset(BaseSegDataset):
+class IDDDataset(BaseSegDataset):
+    # TODO meta info
     METAINFO = dict(
         classes=('road', 'sidewalk', 'building', 'wall', 'fence', 'pole',
                  'traffic light', 'traffic sign', 'vegetation', 'terrain',
@@ -19,8 +20,8 @@ class BDD100KDataset(BaseSegDataset):
                  [0, 60, 100], [0, 80, 100], [0, 0, 230], [119, 11, 32]])
 
     def __init__(self,
-                 img_suffix='.jpg',
-                 seg_map_suffix='.png',
+                 img_suffix='_leftImg8bit.png',
+                 seg_map_suffix='_gtFine_labelcsTrainIds.png',
                  reduce_zero_label=False,
                  **kwargs) -> None:
         super().__init__(
