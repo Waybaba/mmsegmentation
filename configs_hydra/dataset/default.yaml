@@ -82,20 +82,35 @@ tta_pipeline:
         scale: ${dataset.test_scale}
         keep_ratio: true
     - - keep_ratio: true
-        scale_factor: 0.5
-        type: Resize
-      - keep_ratio: true
-        scale_factor: 0.375
-        type: Resize
-      - keep_ratio: true
-        scale_factor: 0.25
-        type: Resize
-      - keep_ratio: true
-        scale_factor: 0.625
+        scale_factor: 1.0
         type: Resize
       - keep_ratio: true
         scale_factor: 0.75
         type: Resize
+      - keep_ratio: true
+        scale_factor: 0.5
+        type: Resize
+      - keep_ratio: true
+        scale_factor: 1.25
+        type: Resize
+      - keep_ratio: true
+        scale_factor: 1.5
+        type: Resize
+    # - - keep_ratio: true
+    #     scale_factor: 0.5
+    #     type: Resize
+    #   - keep_ratio: true
+    #     scale_factor: 0.375
+    #     type: Resize
+    #   - keep_ratio: true
+    #     scale_factor: 0.25
+    #     type: Resize
+    #   - keep_ratio: true
+    #     scale_factor: 0.625
+    #     type: Resize
+    #   - keep_ratio: true
+    #     scale_factor: 0.75
+    #     type: Resize
       # - keep_ratio: true
       #   scale_factor: 0.875
       #   type: Resize
