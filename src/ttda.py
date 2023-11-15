@@ -319,6 +319,18 @@ def make_grid(num=32):
 	grid = np.stack((x, y), axis=-1).reshape(-1, 2)
 	return grid
 
+def inflation(pred, inflation=0):
+	"""
+	inflate each class, if it expand to 255 areas, make the pixel the class.
+	if it expand to other classes, do not change the pixel
+	if multiple class expand to the same 255 areas, keep it 255
+	ps. first calculate for each class, then merge into one
+	pred: (h,w) tensor with int 0~c-1, and 255 for empty
+	inflation: number of pixels inflation
+	return:
+		pred after inflation
+	"""
+
 class ProtoClassifier:
 	"""
 		cfg: 
@@ -1865,6 +1877,8 @@ class TestLoopWrapper(TestLoop):
 				# apply mask
 				sem_seg_ = batch_pseudoed[0].pred_sem_seg.data[0]
 				sem_seg_[~hign_conf_mask] = 255
+				if self.kwargs.high_conf_mask.inflation:
+					sem_seg_ = inflation(sem_seg_, self.kwargs.high_conf_mask.inflation)
 				batch_pseudoed[0].pred_sem_seg = PixelData()
 				batch_pseudoed[0].pred_sem_seg.data = sem_seg_.unsqueeze(0)
 		### choose adapt

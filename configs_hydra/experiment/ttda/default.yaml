@@ -36,6 +36,7 @@ test_cfg:
     class_specific: true # mask globally or class-specific
     use_history: false # TODO change to float
     top_p: 0.5 # only keep top_p pixels, others set to 255
+    inflation: 0
   proto_predict:
     turn_on: ???
     rho: count # for updating prototype, history_proto = (1-rho) * history_proto + rho * proto_this_img
@@ -110,8 +111,8 @@ test_cfg:
     cur_recover: false
     ema_pred: false
     mid_pred: true
-    mid_lr_scale: 5.0 # instance adapt need larger lr
-    mid_update_times: 5 # 
+    mid_lr_scale: 10.0 # instance adapt need larger lr
+    mid_update_times: 2 # 
   debug:
     use_mmseg_pseudo_loss: ???
 
