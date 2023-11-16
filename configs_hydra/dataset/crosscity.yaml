@@ -73,6 +73,7 @@ test_dataloader:
   sampler:
     shuffle: true
     type: DefaultSampler
+    seed: 0 # ! for ttda, we want to avoid correlation in ordinary test
 
 train_dataloader:
   batch_size: 2
