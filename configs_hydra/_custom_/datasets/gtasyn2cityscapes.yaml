@@ -30,12 +30,12 @@ test_dataloader:
       seg_map_path: gtFine/val
     data_root: /data/Cityscapes/
     pipeline:
-    - type: LoadImageFromFile
-    - keep_ratio: true
-      scale: ${test_scale} # *id001
-      type: Resize
-    - type: LoadAnnotations
-    - type: PackSegInputs
+      - type: LoadImageFromFile
+      - keep_ratio: true
+        scale: ${test_scale} # *id001
+        type: Resize
+      - type: LoadAnnotations
+      - type: PackSegInputs
     type: CityscapesDataset
   num_workers: 2
   persistent_workers: true

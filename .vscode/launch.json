@@ -149,6 +149,58 @@
 				// temp
 			],
 		},
+		// train_src
+		{
+			"name": "train_src",
+			"type": "python",
+			"request": "launch",
+			"program": "src/entry.py",
+			"console": "integratedTerminal",
+			"justMyCode": true,
+			"noDebug": true,
+			"args": [
+				// TEMP
+				"tta=false",
+				// ### test strategy
+				"crop_size_list_=[512,512]",
+				"stride_list_=[384,384]",
+				"gta_scale_list_=[1280,720]",
+				"model.test_cfg.mode=whole",
+				// ### log/save
+				"wandb.mode=disabled",
+				"train_cfg.val_interval=100",
+				"default_hooks.visualization.draw=true",
+				"default_hooks.visualization.interval=50",
+				// ### model & dataset
+				"experiment=ttda/train_src",
+				"model=segformer_b5",
+				"dataset=gtasyn2cityscapes", // gta2cityscapes, syn2cityscapes, gtasyn2cityscapes
+				// "load_from=/output/hydra_log/MMSEG/multiruns/2023-10-14_02-59-29_015610/0/iter_64000.pth", // slide
+				// "load_from=/output/hydra_log/MMSEG/multiruns/2023-10-14_06-42-21_981484/0/iter_160000.pth", // whole
+				// "load_from=/output/hydra_log/MMSEG/multiruns/2023-10-14_06-42-21_981484/0/iter_16000.pth", // whole
+				// "load_from=/output/hydra_log/MMSEG/multiruns/2023-10-14_03-00-04_359621/0/iter_64000.pth", // iter_144000
+				// ### debug
+				// "++dataset.test_dataloader.dataset.indices=20",
+				// ### ttda !!!!!!!!!!!!!
+				// "test_cfg.slide_adapt=false",
+				// "test_cfg.proto_predict.turn_on=false",
+				// "test_cfg.high_conf_mask.turn_on=true",
+				// "test_cfg.sam_predict.turn_on=false",
+				// "test_cfg.sam_model.turn_on=false",
+				// "test_cfg.ema.turn_on=true",
+				// "test_cfg.pseudo_label.turn_on=true",
+				// ### loss
+				// "test_cfg.debug.use_mmseg_pseudo_loss=true",
+				// "seed=5"
+				// ### optmizer
+				// "optim_wrapper.paramwise_cfg.custom_keys.head.lr_mult=0.0",
+				// "optim_wrapper.paramwise_cfg.custom_keys.back.lr_mult=0.0",
+				// "optim_wrapper.paramwise_cfg.custom_keys.token_prompt.lr_mult=1.0",
+				// "optim_wrapper.paramwise_cfg.custom_keys.tpt_gates.lr_mult=10.0",
+				// "norm_lr_mult=1.0",
+				// temp
+			],
+		},
 		// deeplab_adapt
 		{
 			"name": "deeplab_test",

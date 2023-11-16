@@ -1,36 +1,8 @@
 
 defaults:
-  - default.yaml
-  
-data_folder: /data
-img_ratios: [0.5, 0.75, 1.0, 1.25, 1.5, 1.75]
-test_dataloader:
-  batch_size: 2
-  dataset:
-    data_prefix:
-      img_path: leftImg8bit/val
-      seg_map_path: gtFine/val
-    data_root: /data/Cityscapes/
-    pipeline:
-    - type: LoadImageFromFile
-    - keep_ratio: true
-      scale: ${test_scale} # *id001
-      type: Resize
-    - type: LoadAnnotations
-    - type: PackSegInputs
-    type: CityscapesDataset
-  num_workers: 2
-  persistent_workers: true
-  sampler:
-    shuffle: false
-    type: DefaultSampler
-test_evaluator:
-  iou_metrics:
-  - mIoU
-  type: IoUMetricWrapper
+  - src2cityscapes.yaml
 
 train_dataloader:
-  batch_size: 2
   dataset:
     type: ConcatDataset
     datasets:
@@ -78,42 +50,3 @@ train_dataloader:
         - type: PhotoMetricDistortion
         - type: PackSegInputs
         type: GTADataset
-  num_workers: 2
-  persistent_workers: true
-  sampler:
-    shuffle: true
-    type: InfiniteSampler
-tta_pipeline:
-  - backend_args: null
-    type: LoadImageFromFile
-  - transforms:
-    - - keep_ratio: true
-        scale_factor: 0.5
-        type: Resize
-      - keep_ratio: true
-        scale_factor: 0.75
-        type: Resize
-      - keep_ratio: true
-        scale_factor: 1.0
-        type: Resize
-      - keep_ratio: true
-        scale_factor: 1.25
-        type: Resize
-      - keep_ratio: true
-        scale_factor: 1.5
-        type: Resize
-      - keep_ratio: true
-        scale_factor: 1.75
-        type: Resize
-    - - direction: horizontal
-        prob: 0.0
-        type: RandomFlip
-      - direction: horizontal
-        prob: 1.0
-        type: RandomFlip
-    - - type: LoadAnnotations
-    - - type: PackSegInputs
-    type: TestTimeAug
-
-val_dataloader: ${test_dataloader}
-val_evaluator: ${test_evaluator}

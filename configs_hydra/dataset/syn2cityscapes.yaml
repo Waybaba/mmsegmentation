@@ -1,14 +1,13 @@
 defaults:
   - src2cityscapes.yaml
 
-
 train_dataloader:
   dataset:
     data_prefix:
-      img_path: images
-      seg_map_path: labels
-    data_root: /data/GTA5
-    type: GTADataset
+      img_path: RGB
+      seg_map_path: GT/LABELS
+    data_root: /data/synthia
+    type: SynthiaDataset
     pipeline:
       - type: LoadImageFromFile
       - type: LoadAnnotations

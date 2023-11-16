@@ -1,11 +1,12 @@
 # @package _global_
 
 defaults:
-  - override /model: segformer_b0.yaml
-  - override /dataset: gta2cityscapes.yaml
+  # - override /model: segformer_b0.yaml
+  # - override /dataset: gta2cityscapes.yaml
+  - override /model: null
+  - override /dataset: null
   - _self_
 
-#! not finished yet
 
 ### global_cfg
 crop_size_list_: ??? # [512, 512] or [1024, 1024]
@@ -15,66 +16,15 @@ crop_size:
   _args_:
   - ${crop_size_list_} # e.g. [1024, 1024]
   _target_: builtins.tuple
-test_scale:
-  _args_:
-  - [1024, 512]
-  _target_: builtins.tuple
+
 gta_scale:
   _args_:
   - ${gta_scale_list_} # [1280, 720] if crop_size==[512, 512], [2560, 1440] if crop_size==[1024, 1024]
   _target_: builtins.tuple
 
-
-default_hooks:
-  checkpoint:
-    by_epoch: false
-    interval: 16000
-    type: CheckpointHook
-  logger:
-    interval: 50
-    log_metric_by_epoch: false
-    type: LoggerHook
-  param_scheduler:
-    type: ParamSchedulerHook
-  sampler_seed:
-    type: DistSamplerSeedHook
-  timer:
-    type: IterTimerHook
-  visualization:
-    type: SegVisualizationHook
-
-custom_hooks:
-  # - ${ttda_hook} # ! change ttda_hook.xxx so that could be logged in wandb
-  - type: TTDABeforeRunInitHook
-
-dataset: 
-  train_dataloader: # ! to dataset?
-    batch_size: 1
-    num_workers: 4
-  val_dataloader:
-    batch_size: 1
-    num_workers: 4
-  test_dataloader:
-    batch_size: 1
-    num_workers: 4
-
-param_scheduler:
-  - begin: 0
-    by_epoch: false
-    end: 160000
-    eta_min: 0.0001
-    power: 0.9
-    type: PolyLR
-
+### main !!!
 optim_wrapper:
-  # _delete_: true
-  ### ! SGD
-  # optimizer:
-  #   lr: 6.0e-05
-  #   type: SGD
-  #   weight_decay: 1e-4
-  #   momentum: 0.9
-  ### ! Adam
+  type: OptimWrapper
   optimizer:
     betas:
       _args_:
@@ -91,21 +41,64 @@ optim_wrapper:
         decay_mult: 0.0
       pos_block:
         decay_mult: 0.0
-  type: OptimWrapper
+param_scheduler:
+  - begin: 0
+    by_epoch: false
+    end: 1500
+    start_factor: 1.0e-06
+    type: LinearLR
+  - begin: 1500
+    by_epoch: false
+    end: 160000
+    eta_min: 0.0
+    power: 1.0
+    type: PolyLR
 
+tta: false
 
+dataset: 
+  train_dataloader: # ! to dataset?
+    batch_size: 1
+    num_workers: 4
+  val_dataloader:
+    batch_size: 1
+    num_workers: 4
+  test_dataloader:
+    batch_size: 1
+    num_workers: 1
 
-
-
-test_cfg:
-  type: TestLoop
 train_cfg:
   max_iters: 160000
   type: IterBasedTrainLoop
   val_interval: 16000
 val_cfg:
   type: ValLoop
+test_cfg:
+  mode: whole
+  type: TestLoop
+default_hooks:
+  checkpoint:
+    by_epoch: false
+    interval: 16000
+    type: CheckpointHook
+  logger:
+    interval: 10
+    log_metric_by_epoch: false
+    type: LoggerHook
+  param_scheduler:
+    type: ParamSchedulerHook
+  sampler_seed:
+    type: DistSamplerSeedHook
+  timer:
+    type: IterTimerHook
+  visualization:
+    type: SegVisualizationHook
+    draw: ??? # true
+    interval: ??? # draw seg figure
 
+# custom_hooks:
+  # - ${ttda_hook}
+  # - type: TTDABeforeRunInitHook
 
 ## runtime
 default_scope: mmseg
@@ -116,7 +109,7 @@ env_cfg:
   mp_cfg:
     mp_start_method: fork
     opencv_num_threads: 0
-load_from: ???
+load_from: null
 log_level: INFO
 log_processor:
   by_epoch: false
@@ -134,3 +127,9 @@ visualizer:
       entity: ${oc.env:WANDB_ENTITY}
       tags: ${tags}
     type: WandbVisBackend
+
+
+train: true
+test: true
+tags: [ttda_train_src_debug]
+task_name: MMSEG
