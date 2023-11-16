@@ -113,16 +113,16 @@
 				"gta_scale_list_=[1280,720]",
 				"model.test_cfg.mode=whole",
 				// ### log/save
-				"wandb.mode=disabled",
+				"wandb.mode=online",
 				"train_cfg.val_interval=100",
 				"default_hooks.visualization.draw=true",
-				"default_hooks.visualization.interval=100",
+				"default_hooks.visualization.interval=10",
 				"test_cfg.adapt_img_vis_freq=10",
 				// ### model & dataset
 				"optim_wrapper.optimizer.lr=6e-3",
 				"experiment=ttda/default",
 				"model=segformer_b5",
-				"dataset=crosscity_rio", // cityscapes, mapillary, bdd100k, idd, crosscity
+				"dataset=mapillary", // cityscapes, mapillary, bdd100k, idd, crosscity
 				// "load_from=/output/hydra_log/MMSEG/multiruns/2023-10-14_02-59-29_015610/0/iter_64000.pth", // slide
 				"load_from=/output/hydra_log/MMSEG/multiruns/2023-10-14_06-42-21_981484/0/iter_160000.pth", // whole
 				// "load_from=/output/hydra_log/MMSEG/multiruns/2023-10-14_06-42-21_981484/0/iter_16000.pth", // whole

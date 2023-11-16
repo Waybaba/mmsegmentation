@@ -174,3 +174,86 @@ class MapillaryDataset_v2(BaseSegDataset):
                  **kwargs) -> None:
         super().__init__(
             img_suffix=img_suffix, seg_map_suffix=seg_map_suffix, **kwargs)
+
+
+@DATASETS.register_module()
+class MapillaryDataset_TTDA(MapillaryDataset_v1):
+    def __init__(self,
+                 img_suffix='.jpg',
+                 seg_map_suffix='.png',
+                 metainfo={
+                     "classes": ['road', 'sidewalk', 'building', 'wall', 'fence', 'pole',
+                    'traffic light', 'traffic sign', 'vegetation', 'terrain',
+                    'sky', 'person', 'rider', 'car', 'truck', 'bus', 'train',
+                    'motorcycle', 'bicycle'], # cityscape classes
+                    "palette": [[128, 64, 128], [244, 35, 232], [70, 70, 70], [102, 102, 156],
+                            [190, 153, 153], [153, 153, 153], [250, 170,
+                                                                30], [220, 220, 0],
+                            [107, 142, 35], [152, 251, 152], [70, 130, 180],
+                            [220, 20, 60], [255, 0, 0], [0, 0, 142], [0, 0, 70],
+                            [0, 60, 100], [0, 80, 100], [0, 0, 230], [119, 11, 32]]
+                 },
+                 **kwargs) -> None:
+        super().__init__(
+            img_suffix=img_suffix, seg_map_suffix=seg_map_suffix, metainfo=metainfo,**kwargs)
+
+    @classmethod
+    def get_label_map(cls,
+                      new_classes = None
+                      ):
+        return {
+            0: 255,
+            1: 255,
+            2: 1,
+            3: 4,
+            4: 255,
+            5: 255,
+            6: 3,
+            7: 255,
+            8: 255,
+            9: 255,
+            10: 255,
+            11: 255,
+            12: 255,
+            13: 0,
+            14: 255,
+            15: 1,
+            16: 255,
+            17: 2,
+            18: 255,
+            19: 11,
+            20: 12,
+            21: 12,
+            22: 12,
+            23: 255,
+            24: 0,
+            25: 255,
+            26: 255,
+            27: 10,
+            28: 255,
+            29: 9,
+            30: 8,
+            31: 255,
+            32: 255,
+            33: 255,
+            34: 255,
+            35: 255,
+            36: 255,
+            37: 255,
+            38: 255,
+            39: 255,
+            40: 255,
+            41: 0,
+            42: 255,
+            43: 255,
+            44: 255,
+            45: 5,
+            46: 255,
+            47: 5,
+            48: 6,
+            49: 255,
+            50: 7,
+            51: 255,
+            52: 18,
+            53: 2
+        }

@@ -330,6 +330,7 @@ def inflation(pred, inflation=0):
 	return:
 		pred after inflation
 	"""
+	pass
 
 class ProtoClassifier:
 	"""

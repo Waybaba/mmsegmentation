@@ -8,4 +8,4 @@ test_dataloader:
       img_path: validation/images
       seg_map_path: validation/labels
     data_root: /data/Mapillary/
-    type: MapillaryDataset_v1
+    type: MapillaryDataset_TTDA
