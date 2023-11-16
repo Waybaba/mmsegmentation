@@ -1,7 +1,7 @@
 defaults:
   - default.yaml
 
-test_scale_list_: [1920,1080] # TODO need to verify
+test_scale_list_: [1024,512] # TODO need to verify TODO first several is [1920,1080] but we taske a smaller here for memory
 test_dataloader:
   dataset:
     data_prefix:
