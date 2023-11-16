@@ -1,5 +1,6 @@
 defaults:
   - default.yaml
+
 test_scale_list_: [1024, 512]
 test_dataloader:
   dataset:

@@ -71,7 +71,7 @@ test_dataloader:
   num_workers: 2
   persistent_workers: true
   sampler:
-    shuffle: false
+    shuffle: true
     type: DefaultSampler
 
 train_dataloader:
