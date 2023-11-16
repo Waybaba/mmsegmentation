@@ -2029,7 +2029,7 @@ class TestLoopWrapper(TestLoop):
 					parsed_losses, log_vars = model.parse_losses(losses)  # sum all element with loss in
 					to_logs.update(log_vars)
 					runner.optim_wrapper.update_params(parsed_losses)
-			if self.kwargs.ema.mid_pred:
+			if self.kwargs.ema.turn_on and self.kwargs.ema.mid_pred:
 				for _ in range(self.kwargs.ema.mid_update_times):
 					with self.optim_wrapper_mid.optim_context(self.model_mid):
 						losses_mid = self.model_mid._run_forward(data_batch_for_adapt, mode='loss')  # type: ignore
