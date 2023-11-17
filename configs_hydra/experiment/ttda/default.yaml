@@ -61,6 +61,7 @@ test_cfg:
     num_tokens: 10
     weight_init_type: normal # zero, normal, kv_normal, q_normal
     mode: llama # llama, vpt # TODO
+    gate_off: false
   vpt_cfg:
     turn_on: false 
     type: cnn # "padding" # padding, fixed_patch, random_patch, cnn

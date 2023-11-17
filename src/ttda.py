@@ -1502,8 +1502,12 @@ class MixVisionTransformerTPT(MixVisionTransformer):
 				if self.token_prompts[i] is not None:
 					self.register_parameter(f"token_prompt_q_{i}", self.token_prompts[i]["q"])
 					self.register_parameter(f"token_prompt_kv_{i}", self.token_prompts[i]["kv"])
-			tpt_gates = nn.Parameter(torch.zeros(len(self.layers)))
-			self.register_parameter("tpt_gates", tpt_gates)
+			if tpt_cfg.gate_off:
+				tpt_gates = torch.ones(len(self.layers))
+				self.register_buffer("tpt_gates", tpt_gates)
+			else:
+				tpt_gates = nn.Parameter(torch.zeros(len(self.layers)))
+				self.register_parameter("tpt_gates", tpt_gates)
 		
 		if vpt_cfg.turn_on:
 			self.visual_prompt_module = utils.VisutalPrompter(
