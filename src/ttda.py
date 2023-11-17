@@ -2276,6 +2276,8 @@ class TestLoopWrapper(TestLoop):
 					outputs_test = self.model_ema.test_step(data_batch)
 				elif self.kwargs.ema.mid_pred:
 					outputs_test = self.model_mid.test_step(data_batch)
+				else:
+					outputs_test = self.runner.model.test_step(data_batch)
 			else:
 				outputs_test = self.runner.model.test_step(data_batch)
 		self.evaluator.process(data_samples=outputs_test, data_batch=data_batch)
