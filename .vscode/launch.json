@@ -113,29 +113,30 @@
 				"gta_scale_list_=[1280,720]",
 				"model.test_cfg.mode=whole",
 				// ### log/save
-				"wandb.mode=online",
+				"wandb.mode=offline",
 				"train_cfg.val_interval=100",
 				"default_hooks.visualization.draw=true",
-				"default_hooks.visualization.interval=10",
-				"test_cfg.adapt_img_vis_freq=10",
+				"default_hooks.visualization.interval=100",
+				"test_cfg.adapt_img_vis_freq=100",
 				// ### model & dataset
-				"optim_wrapper.optimizer.lr=6e-3",
+				"optim_wrapper.optimizer.lr=0.0",
 				"experiment=ttda/default",
 				"model=segformer_b5",
-				"dataset=crosscity", // cityscapes, mapillary, bdd100k, idd, crosscity
+				"dataset=mapillary", // cityscapes, mapillary, bdd100k, idd, crosscity
 				// "load_from=/output/hydra_log/MMSEG/multiruns/2023-10-14_02-59-29_015610/0/iter_64000.pth", // slide
-				"load_from=/output/hydra_log/MMSEG/multiruns/2023-10-14_06-42-21_981484/0/iter_160000.pth", // whole
+				"load_from=/output/hydra_log/MMSEG/multiruns/2023-10-14_06-42-21_981484/0/iter_160000.pth", // whole [1280,720] + crop[1024,1024]
 				// "load_from=/output/hydra_log/MMSEG/multiruns/2023-10-14_06-42-21_981484/0/iter_16000.pth", // whole
 				// "load_from=/output/hydra_log/MMSEG/multiruns/2023-10-14_03-00-04_359621/0/iter_64000.pth", // iter_144000
 				// ### debug
-				// "++dataset.test_dataloader.dataset.indices=20",
+				"++dataset.test_dataloader.dataset.indices=5",
 				// ### ttda !!!!!!!!!!!!!
 				"test_cfg.slide_adapt=false",
 				"test_cfg.proto_predict.turn_on=false",
 				"test_cfg.high_conf_mask.turn_on=true",
 				"test_cfg.sam_predict.turn_on=false",
 				"test_cfg.sam_model.turn_on=false",
-				"test_cfg.ema.turn_on=true",
+				"test_cfg.ema.turn_on=false",
+				"test_cfg.pseudo_label.type=ori",
 				"test_cfg.pseudo_label.turn_on=true",
 				// ### loss
 				"test_cfg.debug.use_mmseg_pseudo_loss=true",

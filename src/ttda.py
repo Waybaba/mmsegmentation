@@ -642,13 +642,21 @@ class IoUMetricWrapper(IoUMetric):
 		total_area_union = sum(results[1])
 		total_area_pred_label = sum(results[2])
 		total_area_label = sum(results[3])
+
 		ret_metrics = self.total_area_to_metrics(
 			total_area_intersect, total_area_union, total_area_pred_label,
 			total_area_label, self.metrics, self.nan_to_num, self.beta)
 
-		class_names = self.dataset_meta['classes']
 
-		# summary table
+		### ! @waybaba set non-existing cls in label to nan, thus do not calculate mIoU
+		class_names = self.dataset_meta['classes']
+		for idx, area in enumerate(total_area_label):
+			if area == 0:
+				print(f"non-existing cls {class_names[idx]}, ignore this for mIoU calculation")
+				ret_metrics['IoU'][idx] = np.nan
+		###
+
+		### ! @waybaba summary table
 		ret_metrics_summary = OrderedDict({
 			ret_metric: np.round(np.nanmean(ret_metric_value) * 100, 2)
 			for ret_metric, ret_metric_value in ret_metrics.items()
@@ -675,7 +683,7 @@ class IoUMetricWrapper(IoUMetric):
 		print_log('per class results:', logger)
 		print_log('\n' + class_table_data.get_string(), logger=logger)
 
-		# @waybaba add class IoU
+		# ! @waybaba add class IoU
 		baseline_iou = {
 			"road": 73.5,
 			"sidewalk": 18.78,
